@@ -1,0 +1,13 @@
+{
+  "name": "decimal128",
+  "purpose": "library",
+  "repo_host_readme_url": "https://github.com/JohnAD/decimal128",
+  "repo_host_docs_url": "https://github.com/JohnAD/decimal128/blob/master/docs/",
+  "nimble_url": "https://nimble.directory/pkg/decimal128",
+  "repo_support_url": "https://repo.support/gh/JohnAD/decimal128",
+  "doc_dir": "docs/",
+  "rst_dir": "rst/",
+  "doc_src_dir": "",
+  "nimble_file": "decimal128.nimble",
+  "files_to_ignore": ["src/uint113.nim", "src/dpd.nim", "src/const.nim"]
+}
