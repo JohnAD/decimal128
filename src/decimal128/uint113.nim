@@ -1,5 +1,7 @@
-## A 113-bit unsigned integer library
-## Limited to 34 decimal digits, it is meant for use by ``decimal128``
+# A 113-bit unsigned integer library
+#
+# Limited to 34 decimal digits, it is STRICTLY meant for use by ``decimal128`` and
+# should not be accessible to the public.
 
 import strutils
 import strformat
@@ -15,8 +17,8 @@ const
 type
   uint113* = object
     # used internally to store the digits when importing or exporting to 
-    left: uint64
-    right: uint64
+    left*: uint64
+    right*: uint64
 
 
 proc leftHalf(value: uint64): uint32 =
@@ -79,6 +81,7 @@ const
     uint113(left: 0'u64, right: 1'u64)  # 10 ^ 0
   ]
   BILLION: uint32 = 1000 * 1000 * 1000 # a billion has 10 digits and fits into 32 bits
+  HUNDRED_QUADRILLION: uint64 = 100_000_000_000_000_000'u64 # 1 followed by 17 zeroes
 
 
 proc greaterOrEqualToOneBillion*(val: uint113): bool =
@@ -129,6 +132,72 @@ proc divide*(dividend: uint113, divisor: uint32): tuple[quotient: uint113, remai
 
   result.quotient = pending
   result.remainder = remainder.uint32
+
+
+proc BigMult(left, right: uint64): uint113 =
+  #
+  # multiply two unsigned 64bit numbers into an unsigned 128bit result
+  #
+  let leftHigh = (left shr 32) and 0x00000000FFFFFFFF'u64
+  let leftLow = left and 0x00000000FFFFFFFF'u64
+  let rightHigh = (right shr 32) and 0x00000000FFFFFFFF'u64
+  let rightLow = right and 0x00000000FFFFFFFF'u64
+
+  var productHigh = leftHigh * rightHigh
+  var productMidA = leftHigh * rightLow
+  var productMidB = leftLow * rightHigh
+  var productLow = leftLow * rightLow
+
+  productHigh += productMidA shr 32
+  productMidA = (productMidA and 0x00000000FFFFFFFF'u64) + productMidB + (productLow shr 32)
+
+  productHigh += productMidA shr 32
+  productLow = (productMidA shl 32) + (productLow and 0x00000000FFFFFFFF'u64)
+
+  result.left = productHigh
+  result.right = productLow
+
+
+proc fit52*(number: uint113): bool =
+  # does this number fit into 52 bits?
+  # 64 - 52 = 12 bits
+  result = false
+  if number.left != 0.uint64:
+    return
+  if (number.right and 0xFFF0000000000000'u64) == 0.uint64:
+    result= true
+
+
+proc new_uint113*(digits: array[MAX_DIGITS, byte]): uint113 =
+  result = uint113(left: 0.uint64, right: 0.uint64)
+  var upperPart: uint64 = 0
+  var lowerPart: uint64 = 0
+  #
+  # calculate the binary value of the upper/left-hand 17 digits and the lower/right-hand 17 digits
+  #
+  var power: uint64 = HUNDRED_QUADRILLION
+  for index in 0 ..< 17:
+    power = power div 10
+    if digits[index] != 0:  # to speed things up, we avoid multiplication by zero
+      upperPart += digits[index].uint64 * power
+    if digits[index + 17] != 0:
+      lowerPart += digits[index + 17].uint64 * power
+  #
+  if upperPart == 0.uint64:
+    #
+    # if the answer fits into the lower 17 digits, we are done already
+    #
+    result.left = 0.uint64
+    result.right = lowerPart
+  else:
+    #
+    # move into 128 bits (which, at 34 decimals, will fit into 113 bits)
+    #
+    var big = BigMult(upperPart, HUNDRED_QUADRILLION)
+    result.left = big.left
+    result.right = lowerPart + big.right
+    if result.right < lowerPart:
+      result.left += 1.uint64  # "carry the one" (in binary)
 
 
 proc decode113bit*(b: array[16, byte]): array[MAX_DIGITS, byte] =

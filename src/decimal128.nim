@@ -1,15 +1,15 @@
-## This library creates a data type called Decimal128 that allows one to do
-## store and manipulated decimal numbers.
+## This library creates a data type called ``Decimal128`` that allows one to
+## store and manipulate decimal numbers.
 ##
-## By storing number as decimal digits you can avoid the ambiguity and rounding
+## By storing a number as decimal digits you can avoid the ambiguity and rounding
 ## errors encountered when converting values back-and-forth from binary floating
-## point numbers such as the 64-bit floats used by Nim.
+## point numbers (base 2) and the decimal notation typically used by humans (base 10).
 ##
 ## This is especially useful for applications that are not tolerant of such
 ## rounding errors such as accounting, banking, and finance.
 ##
-## STANDARD
-## --------
+## STANDARD USED
+## -------------
 ##
 ## The specification specifically conforms to the IEEE 754-2008 standard that
 ## is formally available at https://standards.ieee.org/standard/754-2008.html
@@ -22,11 +22,40 @@
 ##
 ## The BID method is used by BSON and MongoDB.
 ##
+## EXAMPLES OF USE
+## --------------
+##
+## .. code:: nim
+##
+##     import decimal128
+##
+##     let a = newDecimal128("4003.250")
+## 
+##     assert a.getPrecision == 7
+##
+##     assert a.toFloat == 4003.25
+##
+##     assert a.toInt == 4003
+##
+##     assert $a == "4003.250"
+##
+##     assert a === newDecimal128("4003250E-3")
+##
+##     assert a === newDecimal128("4.003250E+3")
+## 
+##     # interpret a segment of data from a BSON file:
+##     let b = decodeDecimal128("2FF83CD7450BE3F39FA2D32880000000", encoding=ceBID)
+## 
+##     assert $b == "0.001234000000000000000000000000000000"
+## 
+##     assert b.getPrecision == 34
+## 
+##     assert b.toFloat == 0.001234
+##
 
 import strutils except strip
 import unicode
-import bitops
-import uint113
+import decimal128/uint113
 
 
 proc nz(v: byte): bool =
@@ -45,6 +74,9 @@ const
   MAXIMUM_SIGNIFICAND: string = "10_000_000_000_000_000_000_000_000_000_000_000"
   SIGNIFICAND_SIZE: int = 34
   BIAS: int16 = 6176
+  EXP_UPPER_BOUND: int16 = 0x3fff.int16 - BIAS  # 14 bits less bias
+  EXP_LOWER_BOUND: int16 = 0 - BIAS
+  ALLZERO: array[SIGNIFICAND_SIZE, byte] = [0.byte, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 const
   DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
@@ -113,6 +145,13 @@ type
     dkValued,
     dkInfinite,
     dkNaN
+  CoefficientEncoding* = enum
+    ## The two coefficient (significand) storage formats supported by IEEE 754 2008.
+    ##
+    ## ``ceDPD`` stands for Densely Packed Decimal
+    ## ``ceBID`` stands for Binary Integer Decimal
+    ceDPD,
+    ceBID
   Decimal128* = object
     ## A Decimal128 decimal number. Limited to 34 digits.
     ##
@@ -120,13 +159,13 @@ type
     ## use the corresponding ``newDecimal128`` and ``exportDecimal128`` procedures.
     negative: bool
     case kind: Decimal128Kind
+    of dkNaN:
+      signalling: bool
     of dkValued:
       significand: array[SIGNIFICAND_SIZE, byte]
       exponent: int
     of dkInfinite:
       discard
-    of dkNaN:
-      signalling: bool
 
   #
   # ** Explaining Significand and It's Storage **
@@ -181,13 +220,157 @@ type
   #   1. the "LONGFLAG" in the combo field is for non-numbers: not-a-number (NaN) and infinity (Infinity)
   #   2. yes everything is convoluted. But the spec is what it is.
 
+# forward-ref:
+proc `$`*(d: Decimal128): string
+
+proc repr*(d: Decimal128): string =
+  result = "( "
+  case d.kind:
+  of dkValued:  
+    if d.negative:
+      result &= "-"
+    else:
+      result &= "+"
+    result &= " , "
+    for digit in d.significand:
+      result &= DIGITS[digit]
+    result &= " , E "
+    result &= $d.exponent
+  of dkInfinite:
+    if d.negative:
+      result &= "-"
+    else:
+      result &= "+"
+    result &= " , "
+    result &= "Infinity"
+  of dkNaN:
+    result &= "NaN , "
+    if d.signalling:
+      result &= "signalling"
+    else:
+      result &= "NOT signalling"
+  result &= " )"
+
+
+proc isNegative*(number: Decimal128): bool =
+  ## Returns true if the number is negative or is negative infinity; otherwise false.
+  case number.kind:
+  of dkValued:  
+    result = number.negative
+  of dkInfinite:
+    result = number.negative
+  of dkNaN:
+    result = false
+
+
+proc isPositive*(number: Decimal128): bool =
+  ## Returns true the number is positive or is positive infinity; otherwise false.
+  case number.kind:
+  of dkValued:  
+    result = not number.negative
+  of dkInfinite:
+    result = not number.negative
+  of dkNaN:
+    result = false
+
+
+proc isReal*(number: Decimal128): bool =
+  ## Returns true the number has a real value; otherwise false.
+  case number.kind:
+  of dkValued:  
+    result = true
+  of dkInfinite:
+    result = false
+  of dkNaN:
+    result = false
+
+
+proc isInfinite*(number: Decimal128): bool =
+  ## Returns true the number is infinite (positive or negative); otherwise false.
+  case number.kind:
+  of dkValued:  
+    result = false
+  of dkInfinite:
+    result = true
+  of dkNaN:
+    result = false
+
+
+proc isPositiveInfinity*(number: Decimal128): bool =
+  ## Returns true the number is infinite and positive; otherwise false.
+  case number.kind:
+  of dkValued:  
+    result = false
+  of dkInfinite:
+    if number.negative:
+      result = false
+    else:
+      result = true
+  of dkNaN:
+    result = false
+
+
+proc isNegativeInfinity*(number: Decimal128): bool =
+  ## Returns true the number is infinite and negative; otherwise false.
+  case number.kind:
+  of dkValued:  
+    result = false
+  of dkInfinite:
+    if number.negative:
+      result = true
+    else:
+      result = false
+  of dkNaN:
+    result = false
+
+
+proc isNaN*(number: Decimal128): bool =
+  ## Returns true the number is actually not a number (NaN); otherwise false.
+  case number.kind:
+  of dkValued:  
+    result = false
+  of dkInfinite:
+    result = false
+  of dkNaN:
+    result = true
+
+
+proc intStr(dList: array[SIGNIFICAND_SIZE, byte]): string =
+  # a quick way to generate an integer from the significand
+  var firstDigitSeen = false
+  for digit in dList:
+    if nz(digit):
+      firstDigitSeen = true
+    if firstDigitSeen:
+      result &= $(digit.int)
+  if not firstDigitSeen:
+    result = "0"
+
+
+proc shiftDecimalsLeft(values: array[SIGNIFICAND_SIZE, byte], shiftNeeded: int16): array[SIGNIFICAND_SIZE, byte] =
+  for index in 0 ..< SIGNIFICAND_SIZE:
+    result[index] = values[index]
+  for _ in 0 ..< shiftNeeded:
+    for index in 0 ..< (SIGNIFICAND_SIZE - 1):
+      result[index] = result[index + 1]
+    result[33] = 0.byte
+
+
+proc shiftDecimalsRight(values: array[SIGNIFICAND_SIZE, byte], shiftNeeded: int16): array[SIGNIFICAND_SIZE, byte] =
+  for index in 0 ..< SIGNIFICAND_SIZE:
+    result[index] = values[index]
+  for _ in 0 ..< shiftNeeded:
+    for index in 1 ..< SIGNIFICAND_SIZE:
+      let place = SIGNIFICAND_SIZE - index
+      result[place] = result[place - 1]
+    result[0] = 0.byte
+
 
 proc zero*(): Decimal128 =
   ## Create a Decimal128 value of positive zero
   result = Decimal128(kind: dkValued)
   result.negative = false
-  for index in 0 ..< SIGNIFICAND_SIZE:
-    result.significand[index] = 0.byte
+  result.significand = ALLZERO
   result.exponent = 0
 
 
@@ -198,21 +381,80 @@ proc nan*(): Decimal128 =
 
 proc digitCount(significand: array[SIGNIFICAND_SIZE, byte]): int =
   # get the number of digits, ignoring the leading zeroes
-  # if all zeroes, then eh answer is 1 the actual "0" in the number
+  # if all zeroes, then the answer is 1 the actual "0" in the number
   result = 0
   var nonZeroFound = false
   for d in significand:
-    if d==0:
-      if nonZeroFound:
-        result += 1
-    else:
+    if d != 0.byte:
+      nonZeroFound = true
+    if nonZeroFound:
       result += 1
-      nonZeroFound = false
   if result == 0:
     result = 1
 
 
-proc newDecimal128UsingBID*(data: string): Decimal128 =
+proc getPrecision*(number: Decimal128): int =
+  ## Get number of digits of precision (significance) of the decimal number.
+  ##
+  ## If a real number, then it will be a number between 1 and 34. Even a value of "0" has
+  ## one digit of Precision.
+  ## A zero is only returned if the number is not-a-number (NaN) or if Infinity.
+  case number.kind:
+  of dkValued:
+    result = digitCount(number.significand)
+  of dkInfinite:
+    result = 0
+  of dkNaN:
+    result = 0
+
+proc adjustExponent(number: Decimal128, newExponent: int, forgiveSmall = false): Decimal128 =
+  result = number
+  if number.significand == ALLZERO:
+    result = zero()
+    return
+  let currentExponent = number.exponent
+  let diff = (currentExponent - newExponent).int16
+  if diff == 0:
+    return
+  elif diff > 0:
+    result.significand = shiftDecimalsLeft(number.significand, diff)
+    result.exponent -= diff
+    if result.significand == ALLZERO:
+      raise newException(ValueError, "number too large to adjust")
+  elif diff < 0:
+    result.significand = shiftDecimalsRight(number.significand, -diff)
+    result.exponent -= diff
+    if not forgiveSmall:
+      if result.significand == ALLZERO:
+        raise newException(ValueError, "number too small to adjust")
+
+# proc normalized(number: Decimal128): Decimal128 =
+#   ## Returns an adjusted number so that it has:
+#   ##
+#   ## * the same number of significant digits
+#   ## * One leading digit of the mantissa when displayed in scientific notation
+#   ##
+#   ## So, for example:
+#   ##
+#   ##     123E+4  which is 123 x 10 ^ 4
+#   ##
+#   ## would become:
+#   ##
+#   ##     1.23E+6 which is 1.23 x 10 ^ 6
+#   ##
+#   ## Not all numbers can be normalized since we are maintaining significance (precision).
+#   ## If that is the case, a simple copy of the number is returned.
+#   ##
+#   ## NOTE: when used with a database, arbitrarily normalizing a decimal number
+#   ## before updating a record or document is often considered bad practice.
+#   ## For example, in MongoDB:
+#   ##   https://github.com/mongodb/specifications/blob/master/source/bson-decimal128/decimal128.rst#abstract
+#   let sig = number.getPrecision
+#   let exp = number.exponent.int
+#   let ideal = 
+
+
+proc decodeDecimal128*(data: string, encoding: CoefficientEncoding): Decimal128 =
   ## Parse the string to a Decimal128 using the IEEE754 2008 encoding with
   ## the coefficient stored as a unsigned binary integer in the last 113 bits.
   ##
@@ -225,8 +467,17 @@ proc newDecimal128UsingBID*(data: string): Decimal128 =
   ## to be a binary copy.
   ##
   ## The Decimal128 is NOT normalized in any way. If the returned value is then
-  ## encoded back to binary using ``tbd`` then it should exactly match the 
+  ## encoded back to binary using ``encodeDecimal128`` then it should exactly match the 
   ## original binary value.
+  ##
+  ## The ``encoding`` method must be of the one of the following:
+  ##
+  ## 1. ``ceDPD`` -- Densely Packed Decimal. This matches method 1 of storing the coefficient (significand).
+  ##     Essentially, each three digits is stored as a 10-bit declet as described in
+  ##     https://en.wikipedia.org/wiki/Densely_packed_decimal
+  ## 2. ``ceBID`` -- Binary Integer Decimal. This matches method 2 of storing the coeffecient.
+  ##     Essentially, the number is stored as a simple unsigned integer into the last
+  ##     133 bits of the 128-bit pattern. See the IEEE 754 2008 spec for details.
   var bs: array[16, byte]
   if data.len == 32:
     let bsStr = parseHexStr(data)
@@ -296,7 +547,11 @@ proc newDecimal128UsingBID*(data: string): Decimal128 =
   # interpret the significand
   #
   if decType == dkValued:
-    significand = decode113bit(bs)
+    case encoding:
+    of ceDPD:
+      raise newException(ValueError, "DPD support on decoding not actually implemented yet.")
+    of ceBID:
+      significand = decode113bit(bs)
   #
   # return the value
   #
@@ -314,6 +569,56 @@ proc newDecimal128UsingBID*(data: string): Decimal128 =
     result.signalling = signalling
 
 
+proc encodeDecimal128*(value: Decimal128, encoding: CoefficientEncoding): string =
+  ## Generate a sequence of bytes that matches the IEEE 754 2008 specification.
+  ##
+  ## The returned string will be exactly 16 bytes long and very likely contains
+  ## binary zero (null) values. The result is not meant to be printable.
+  ##
+  ## The ``encoding`` method must be of the one of the following:
+  ##
+  ## 1. ``ceDPD`` -- Densely Packed Decimal. This matches method 1 of storing the coefficient (significand).
+  ##     Essentially, each three digits is stored as a 10-bit declet as described in
+  ##     https://en.wikipedia.org/wiki/Densely_packed_decimal
+  ## 2. ``ceBID`` -- Binary Integer Decimal. This matches method 2 of storing the coeffecient.
+  ##     Essentially, the number is stored as a simple unsigned integer into the last
+  ##     133 bits of the 128-bit pattern. See the IEEE 754 2008 spec for details.
+  case value.kind:
+  of dkValued:
+    result = "00000000000000000000000000000000".parseHexStr
+    if value.negative:
+      result[0] = (result[0].byte or SIGN_MASK_0).char
+    if true:
+      # TODO: test mediumflag handling
+      let unbiasedExponent = (value.exponent + BIAS).uint16
+      let exponentBits = unbiasedExponent shl 1
+      result[0] = (result[0].byte or (exponentBits shr 8).byte).char
+      result[1] = (result[1].byte or exponentBits.byte).char
+    case encoding:
+    of ceDPD:
+      raise newException(ValueError, "DPD support on encoding not actually implemented yet.")
+    of ceBID:
+      #
+      # BID encoding
+      #
+      var bigInt = new_uint113(value.significand)
+      var left = bigInt.left   # both uint64 types
+      var right = bigInt.right
+      for place in 0 .. 7:
+        let index = 7 - place
+        result[index] = (result[index].byte or left.byte).char
+        left = left shr 8
+        result[index + 8] = (result[index + 8].byte or right.byte).char
+        right = right shr 8
+  of dkInfinite:
+    if value.negative:
+      result = "f8000000000000000000000000000000".parseHexStr
+    else:
+      result = "78000000000000000000000000000000".parseHexStr
+  of dkNaN:
+    result = "7c000000000000000000000000000000".parseHexStr
+
+
 proc newDecimal128*(str: string): Decimal128 =
   ## convert a string containing a decimal number to Decimal128
   ##
@@ -324,12 +629,18 @@ proc newDecimal128*(str: string): Decimal128 =
   ## * underscores (_) are ignored
   ## * commas (,) are ignored
   ## * only one period is expected.
-  ## * 
+  ## * case is ignored
+  ##
+  ## The string can contain one of the following:
+  ##
+  ## 1. ``"Infinity"`` or ``"-Infinity"`` for positive/negative infinity.
+  ##    This can also be ``"+Infinity"`` or anything that starts with "inf"
+  ## 2. ``"NaN"`` for a Not-A-Number designation.
+  ## 3. Any simple decimal number, such as ``"12.34223"``.
+  ## 4. Any simple integer, such as ``"38923"`` or ``"-0236"``.
+  ## 5. Any number in scientific notation using ``E`` as a prefix for the exponent.
+  ##    Examples: ``"-1423E+3"`` or ``"3.2232E-20"``.
   ## 
-  ## and, currently:
-  ##
-  ## * scientific notations or "E" notations are not supported.
-  ##
   type
     ParseState = enum
       psPre,            # we haven't found the number yet
@@ -338,9 +649,15 @@ proc newDecimal128*(str: string): Decimal128 =
       psIntCoeff,       # we are reading the the integer part of a decimal number (NN.nnn)
       psDecimalPoint,   # we found a single decimal point
       psFracCoeff,      # we are reading the decimals of a decimal number  (nn.NNN)
-      psSignForExp,      # we are reading the +/- of an exponent
+      psSignForExp,     # we are reading the +/- of an exponent
       psExp,            # we are reading the decimals of an exponent
       psDone            # ignore everything else
+
+  const
+    IGNORED_CHARS: seq[char] = @[
+      '_', 
+      ','
+    ]
 
   let s = str.toLower().strip()
 
@@ -402,6 +719,8 @@ proc newDecimal128*(str: string): Decimal128 =
     of psIntCoeff:
       if DIGITS.contains(ch):
         discard
+      elif IGNORED_CHARS.contains(ch):
+        discard
       elif ch == '.':
         state = psDecimalPoint
       elif ch == 'e':
@@ -415,6 +734,8 @@ proc newDecimal128*(str: string): Decimal128 =
         state = psDone
     of psFracCoeff:
       if DIGITS.contains(ch):
+        discard
+      elif IGNORED_CHARS.contains(ch):
         discard
       elif ch == 'e':
         state = psSignForExp
@@ -446,15 +767,17 @@ proc newDecimal128*(str: string): Decimal128 =
       legit = true
     of psIntCoeff:
       # given the state table, the 'find' function should never return -1
-      digitList.add(DIGITS.find(ch).byte)
-      legit = true
+      if not IGNORED_CHARS.contains(ch):
+        digitList.add(DIGITS.find(ch).byte)
+        legit = true
     of psDecimalPoint:
       discard
     of psFracCoeff:
       # given the state table, the 'find' function should never return -1
-      digitList.add(DIGITS.find(ch).byte)
-      result.exponent -= 1
-      legit = true
+      if not IGNORED_CHARS.contains(ch):
+        digitList.add(DIGITS.find(ch).byte)
+        result.exponent -= 1
+        legit = true
     of psSignForExp:
       if ch == '-':
         expNegative = true
@@ -465,6 +788,21 @@ proc newDecimal128*(str: string): Decimal128 =
   #
   # move the digits into the right-aligned significand
   #
+  # if too large, safely remove leading zeros
+  if digitList.len > SIGNIFICAND_SIZE:
+    var nonZeroFound = false
+    var temp: seq[byte] = @[]
+    for val in digitList:
+      if val != 0.byte:
+        nonZeroFound = true
+      if nonZeroFound:
+        temp.add val
+    digitList = temp
+  # if still too large, removing trailing digits. AKA "clamping"
+  if digitList.len > SIGNIFICAND_SIZE:
+    let digitsToRemove = digitList.len - SIGNIFICAND_SIZE
+    digitList = digitList[0 ..< SIGNIFICAND_SIZE]
+    result.exponent += digitsToRemove
   let offset = SIGNIFICAND_SIZE - digitList.len
   for index, val in digitList:
     result.significand[index + offset] = val
@@ -478,20 +816,40 @@ proc newDecimal128*(str: string): Decimal128 =
         result.exponent -= exp
       else:
         result.exponent += exp
+      if result.exponent < EXP_LOWER_BOUND:
+        let shiftNeeded = (EXP_LOWER_BOUND - result.exponent).int16
+        result.significand = shiftDecimalsRight(result.significand, shiftNeeded)
+        result.exponent += shiftNeeded
     except:
       discard
 
 
-proc intStr(dList: array[SIGNIFICAND_SIZE, byte]): string =
-  # a quick way to generate an integer from the significand
-  var firstDigitSeen = false
-  for digit in dList:
-    if nz(digit):
-      firstDigitSeen = true
-    if firstDigitSeen:
-      result &= $(digit.int)
-  if not firstDigitSeen:
-    result = "0"
+proc newDecimal128*(value: int, precision: int): Decimal128 =
+  ## Convert an integer to Decimal128
+  ##
+  ## Because there is nothing "intrisic" to a binary integer to determine
+  ## precision, a precision parameter *must* be passed.
+  var precisionToUse = precision
+  if precision < 1:
+    raise newException(ValueError, "precision cannot be less than 1. $1 was tried.".format(precision))
+  if precision > 34:
+    precisionToUse = 34    
+  result = newDecimal128($value)
+  let nativePrecision = result.getPrecision
+  if nativePrecision == precisionToUse:
+    return
+  let shiftNeeded = (nativePrecision - precisionToUse).int16
+  if shiftNeeded > 0:
+    result.significand = shiftDecimalsRight(result.significand, shiftNeeded)
+    result.exponent += shiftNeeded
+  else:
+    result.significand = shiftDecimalsLeft(result.significand, -shiftNeeded)
+    result.exponent += shiftNeeded
+
+
+proc newDecimal128*(value: float): Decimal128 =
+  ## Convert a 64-bit floating point number to Decimal128
+  result = newDecimal128($value)
 
 
 proc simpleDecStr(dList: array[SIGNIFICAND_SIZE, byte], decimalPlace: int): string =
@@ -523,6 +881,52 @@ proc simpleDecStr(dList: array[SIGNIFICAND_SIZE, byte], decimalPlace: int): stri
         if index == depth:
           result &= "."
         result &= ch
+
+
+proc toInt*(value: Decimal128): int =
+  ## Return the integer part of a decimal as an int.
+  ##
+  ## This function truncates rather than rounds. So "1.6" will return an integer of
+  ## 1 not 2.
+  ##
+  ## If the integer part will not fit into a Nim integer, then
+  ## an OverflowError error is raised.
+  case value.kind:
+  of dkInfinite:
+    raise newException(OverflowError, "Decimal infinity will not fit into an integer.")
+  of dkNaN:
+    raise newException(ValueError, "Decimal NaN cannot be stored into an integer.")
+  of dkValued:
+    let temp = value.adjustExponent(0, forgiveSmall=true)
+    let bigInt = new_uint113(temp.significand)
+    if bigInt.left != 0:
+      raise newException(OverflowError, "Decimal is too large to fit into an integer.")
+    result = bigInt.right.int
+    if value.negative:
+      result = -result
+
+
+proc toFloat*(value: Decimal128): float =
+  ## Return the floating point equivalent of a decimal.
+  ##
+  ## Please keep in mind that a decimal number can store numbers not possible in binary
+  ## so it is possible this conversion will introduce rounding and conversion
+  ## errors.
+  #
+  # TODO: This is a hack. Make this fancier later; I'm not convinced this will
+  # cover all possible conversion border cases
+  #
+  # a IEEE 754-1985 double float, as used by Nim, has a 11-bit binary exponent and
+  # a 52-bit binary fraction. By adjusting and reducing, I can envision scenarious where
+  # a direct and purposeful conversion could handle more border cases.
+  case value.kind:
+  of dkInfinite:
+    raise newException(OverflowError, "Decimal infinity will not fit into a float.")
+  of dkNaN:
+    raise newException(ValueError, "Decimal NaN cannot be stored into a float.")
+  of dkValued:
+    let s = $value
+    result = parseFloat(s)
 
 
 proc `===`*(left: Decimal128, right: Decimal128): bool =
@@ -584,35 +988,6 @@ proc `$`*(d: Decimal128): string =
       result = "Infinity"
   of dkNaN:
     result = "NaN"
-
-
-proc repr*(d: Decimal128): string =
-  result = "( "
-  case d.kind:
-  of dkValued:  
-    if d.negative:
-      result &= "-"
-    else:
-      result &= "+"
-    result &= " , "
-    for digit in d.significand:
-      result &= DIGITS[digit]
-    result &= " , E "
-    result &= $d.exponent
-  of dkInfinite:
-    if d.negative:
-      result &= "-"
-    else:
-      result &= "+"
-    result &= " , "
-    result &= "Infinity"
-  of dkNaN:
-    result &= "NaN , "
-    if d.signalling:
-      result &= "signalling"
-    else:
-      result &= "NOT signalling"
-  result &= " )"
 
 
 

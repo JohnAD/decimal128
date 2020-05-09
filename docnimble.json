@@ -9,5 +9,5 @@
   "rst_dir": "rst/",
   "doc_src_dir": "",
   "nimble_file": "decimal128.nimble",
-  "files_to_ignore": ["src/uint113.nim", "src/dpd.nim", "src/const.nim"]
+  "files_to_ignore": ["src/decimal128/uint113.nim", "src/decimal128/dpd.nim"]
 }
