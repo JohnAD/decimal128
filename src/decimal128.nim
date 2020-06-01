@@ -143,10 +143,6 @@ const
   # BSON_STYLE_LEFT_MASK: uint64 =            0x003FFFFFFFFFFFFF'u64
 
 type
-  PrecisionKind = enum
-    pkNatural,
-    pkPrecise,
-    pkScaled
   Decimal128Kind = enum
     # internal use: the state of the Decimal128 variable
     dkValued,
@@ -951,9 +947,66 @@ proc convertTransientToDecimal128(t: Transient128): Decimal128 =
   of dkNaN:
     result = Decimal128(kind: dkNaN)
     result.signalling = t.signalling
+
+
+proc setPrecision*(value: Decimal128, precision: int): Decimal128 =
+  ## Create a Decimal128 with the supplied precision.
+  ##
+  ## The supplied precision must be a value from 1 to 34.
+  ##
+  ## When NaN or Infinity is passed, the value is return as-is.
+  result = value
+  case value.kind:
+  of dkValued:
+    if precision != NOP:
+      if precision < 1:
+        raise newException(ValueError, "precision cannot be less than 1. $1 was tried.".format(precision))
+      if precision > 34:
+        raise newException(ValueError, "precision cannot be more than 34. $1 was tried.".format(precision))
+    let nativePrecision = result.getPrecision
+    if nativePrecision != precision:
+      let shiftNeeded = (nativePrecision - precision).int16
+      if shiftNeeded > 0:
+        result.significand = shiftDecimalsRight(result.significand, shiftNeeded)
+        result.exponent += shiftNeeded
+      else:
+        result.significand = shiftDecimalsLeft(result.significand, -shiftNeeded)
+        result.exponent += shiftNeeded
+  of dkInfinite:
+    discard
+  of dkNaN:
+    discard
   
 
-proc newDecimal128*(str: string): Decimal128 =
+proc setScale*(value: Decimal128, scale: int): Decimal128 =
+  ## Create a Decimal128 with the supplied scale.
+  ##
+  ## The scale must be a value from −6143 to +6144
+  ##  
+  ## When NaN or Infinity is passed, the value is return as-is.
+  result = value
+  case value.kind:
+  of dkValued:
+    let negLimit = 0 - 6143  # honestly, I don't know why this is needed.
+    if scale < negLimit:
+      raise newException(ValueError, "scale cannot be less than -6143. $1 was tried.".format(scale))
+    if scale > 6144:
+      raise newException(ValueError, "scale cannot be greater than 6144. $1 was tried.".format(scale))
+    let nativeScale = result.getScale
+    if scale != nativeScale:
+      let digitsNeeded = (scale - nativeScale).int16
+      if digitsNeeded > 0:
+        result.significand = shiftDecimalsLeft(result.significand, digitsNeeded)
+      else:
+        result.significand = shiftDecimalsRight(result.significand, -(digitsNeeded))
+      result.exponent -= digitsNeeded
+  of dkInfinite:
+    discard
+  of dkNaN:
+    discard
+  
+
+proc newDecimal128*(str: string, precision: int = NOP, scale: int = NOP): Decimal128 =
   ## convert a string containing a decimal number to Decimal128
   ##
   ## A few parsing rules:
@@ -975,72 +1028,93 @@ proc newDecimal128*(str: string): Decimal128 =
   ## 5. Any number in scientific notation using ``E`` as a prefix for the exponent.
   ##    Examples: ``"-1423E+3"`` or ``"3.2232E-20"``.
   ## 
+  ## If ``precision`` is passed a value (from 1 to 34), then the number is forced to use that precision. When
+  ## needed, additional decimal places are added to the right. For example, ``Decimal128("423.0", precision=6)`` is
+  ## the equivalant of "423.000" and ``Decimal128("423.0", precision=1)`` is "400", or more accurately, "4E2".
+  ##
+  ## If ``scale`` is passed a value (−6143 to +6144), then the number is forced to use the equivalent number
+  ## of digits before/after the decimal place. For example, ``Decimal128("423.0", scale=2)`` is the equivalent of
+  ## "423.00" and ``Decimal128("423.0", scale=-2)`` is "400", or more accurately, "4E2".
+  ##
+  ## If both ``precision`` and ``scale`` are passed, then the ``scale`` is first used, then a check is made: does the
+  ## resulting decimal value "fit" within the requested ``precision``? If not, a ValueError is raised.
+  ##
+  ## For example:
+  ##
+  ## ``let x = Decimal128("423.0", precision=6, scale=2)``
+  ##
+  ## works perfectly. "423.00" has a precision of 5, which is less than or equal to 6. But:
+  ##
+  ## ``let x = Deicmal128("73737", precision=6, scale=2)``
+  ##
+  ## will generate a ValueError at run-time since "73737.00" has a precision of 7.
   let t = parseFromString(str)
   result = convertTransientToDecimal128(t)
+  #
+  # make scale/precision adjustments
+  #
+  if scale != NOP:
+    result = result.setScale(scale)
+    if precision != NOP:  # if both are set, then precision is simply a checker
+      if result.getPrecision() > precision:
+        raise newException(
+          ValueError, 
+          "a precision of $1 was requested, but $2 has a precision of $3 at scale $4".format($precision, $result, $getPrecision(result), $scale)
+        )
+  elif precision != NOP:
+    result = result.setPrecision(precision)
 
 
 proc newDecimal128*(value: int, precision: int = NOP, scale: int = NOP): Decimal128 =
   ## Convert an integer to Decimal128
   ##
-  ## If ``precision`` is passed a value (from 1 to 34), then the integer is forced to use that precision. When
+  ## If ``precision`` is passed a value (from 1 to 34), then the number is forced to use that precision. When
   ## needed, additional decimal places are added to the right. For example, ``Decimal128(423, precision=6)`` is
   ## the equivalant of "423.000" and ``Decimal128(423, precision=1)`` is "400", or more accurately, "4E2".
   ##
-  ## If ``scale`` is passed a value (−6143 to +6144), then the integer is forced to use the equivalent number
+  ## If ``scale`` is passed a value (−6143 to +6144), then the number is forced to use the equivalent number
   ## of digits before/after the decimal place. For example, ``Decimal128(423, scale=2)`` is the equivalent of
   ## "423.00" and ``Decimal128(423, scale=-2)`` is "400", or more accurately, "4E2".
   ##
-  ## If both ``precision`` and ``scale`` are passed, a ValueError is raised.
-  result = newDecimal128($value)
-  #
-  var precisionChoice: PrecisionKind
-  if (precision != NOP) and (scale != NOP):
-    raise newException(ValueError, "You cannot provide both \"precision\" and \"scale\" to newDecimal128")
-  if precision != NOP:
-    precisionChoice = pkPrecise
-  elif scale != NOP:
-    precisionChoice = pkScaled
-  else:
-    precisionChoice = pkNatural
-  #
-  # make adjustment
-  #
-  case precisionChoice:
-  of pkNatural:
-    discard  # nothing to do
-  of pkPrecise:
-    var precisionToUse = precision
-    if precision < 1:
-      raise newException(ValueError, "precision cannot be less than 1. $1 was tried.".format(precision))
-    if precision > 34:
-      precisionToUse = 34    
-    let nativePrecision = result.getPrecision
-    if nativePrecision != precisionToUse:
-      let shiftNeeded = (nativePrecision - precisionToUse).int16
-      if shiftNeeded > 0:
-        result.significand = shiftDecimalsRight(result.significand, shiftNeeded)
-        result.exponent += shiftNeeded
-      else:
-        result.significand = shiftDecimalsLeft(result.significand, -shiftNeeded)
-        result.exponent += shiftNeeded
-  of pkScaled:
-    discard
-    let negLimit = 0 - 6143  # honestly, I don't know why this is needed.
-    if scale < negLimit:
-      raise newException(ValueError, "scale cannot be less than -6143. $1 was tried.".format(scale))
-    if scale > 6144:
-      raise newException(ValueError, "scale cannot be greater than 6144. $1 was tried.".format(scale))
-    if scale != 0:  # the "natural" scale of an integer is zero; always
-      if scale > 0:
-        result.significand = shiftDecimalsLeft(result.significand, scale.int16)
-      else:
-        result.significand = shiftDecimalsRight(result.significand, -(scale.int16))
-      result.exponent -= scale
+  ## If both ``precision`` and ``scale`` are passed, then the ``scale`` is first used, then a check is made: does the
+  ## resulting decimal value "fit" within the requested ``precision``? If not, a ValueError is raised.
+  ##
+  ## For example:
+  ##
+  ## ``let x = Decimal128(423, precision=6, scale=2)``
+  ##
+  ## works perfectly. "423.00" has a precision of 5, which is less than or equal to 6. But:
+  ##
+  ## ``let x = Deicmal128(73737, precision=6, scale=2)``
+  ##
+  ## will generate a ValueError at run-time since "73737.00" has a precision of 7.
+  result = newDecimal128($value, precision=precision, scale=scale)
 
 
-proc newDecimal128*(value: float): Decimal128 =
+proc newDecimal128*(value: float, precision: int = NOP, scale: int = NOP): Decimal128 =
   ## Convert a 64-bit floating point number to Decimal128
-  result = newDecimal128($value)
+  ##
+  ## If ``precision`` is passed a value (from 1 to 34), then the number is forced to use that precision. When
+  ## needed, additional decimal places are added to the right. For example, ``Decimal128(423.0, precision=6)`` is
+  ## the equivalant of "423.000" and ``Decimal128(423.0, precision=1)`` is "400", or more accurately, "4E2".
+  ##
+  ## If ``scale`` is passed a value (−6143 to +6144), then the number is forced to use the equivalent number
+  ## of digits before/after the decimal place. For example, ``Decimal128(423.0, scale=2)`` is the equivalent of
+  ## "423.00" and ``Decimal128(423.0, scale=-2)`` is "400", or more accurately, "4E2".
+  ##
+  ## If both ``precision`` and ``scale`` are passed, then the ``scale`` is first used, then a check is made: does the
+  ## resulting decimal value "fit" within the requested ``precision``? If not, a ValueError is raised.
+  ##
+  ## For example:
+  ##
+  ## ``let x = Decimal128(423.0, precision=6, scale=2)``
+  ##
+  ## works perfectly. "423.00" has a precision of 5, which is less than or equal to 6. But:
+  ##
+  ## ``let x = Deicmal128(73737.0, precision=6, scale=2)``
+  ##
+  ## will generate a ValueError at run-time since "73737.00" has a precision of 7.
+  result = newDecimal128($value, precision=precision, scale=scale)
 
 
 proc simpleDecStr(dList: array[SIGNIFICAND_SIZE, byte], decimalPlace: int): string =

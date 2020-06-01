@@ -4,7 +4,7 @@ import decimal128
 
 
 suite "scale and precision":
-  test "scale measurement":
+  test "scale measurement (from string)":
 
     check newDecimal128("0").getScale == 0
     check newDecimal128("1").getScale == 0
@@ -121,21 +121,36 @@ suite "scale and precision":
     # all nines:
     check newDecimal128("0.000000999999999999999999999999999999999999") === newDecimal128("0.000001000000000000000000000000000000000")
 
-# For later:
+  test "set scale":
+    check $newDecimal128(123, scale=2) == "123.00"
+    check $newDecimal128("123.0000", scale=2) == "123.00"
+    check $newDecimal128(123.0, scale=2) == "123.00"
 
-# assert $newDecimal128128("43.2") == "43.2"
-# assert newDecimal128128("43.2").getPrecision == 3
-# assert newDecimal128128("43.2").getScale == 1
+    check $newDecimal128(123, scale= -1) == "1.2E+2"
+    check $newDecimal128("123.0000", scale= -1) == "1.2E+2"
+    check $newDecimal128(123.0, scale= -1) == "1.2E+2"
 
-# assert $newDecimal128128("43.2", precision=5) == "43.200"
-# assert newDecimal128128("43.2", precision=5).getPrecision == 5
-# assert newDecimal128128("43.2", precision=5).getScale == 3
+  test "set precision":
+    check $newDecimal128(123, precision=5) == "123.00"
+    check $newDecimal128("123.0000", precision=5) == "123.00"
+    check $newDecimal128(123.0, precision=5) == "123.00"
 
-# assert $newDecimal128128("43.2", scale=2) == "43.20"
-# assert newDecimal128128("43.2", scale=2).getPrecision == 4
-# assert newDecimal128128("43.2", scale=2).getScale == 2
+    check $newDecimal128(123, precision=2) == "1.2E+2"
+    check $newDecimal128("123.0000", precision=2) == "1.2E+2"
+    check $newDecimal128(123.0, precision=2) == "1.2E+2"
 
-# assert $newDecimal128128("43.2", scale=-1) == "4E+1"
-# assert newDecimal128128("43.2", scale=-1).getPrecision == 1
-# assert newDecimal128128("43.2", scale=-1).getScale == -1
+  test "set both scale and precision":
+    check $newDecimal128(123, precision=5, scale=2) == "123.00"
+    check $newDecimal128("123.0000", precision=5, scale=2) == "123.00"
+    check $newDecimal128(123.0, precision=5, scale=2) == "123.00"
 
+    check $newDecimal128(123, precision=6, scale=2) == "123.00"
+    check $newDecimal128("123.0000", precision=6, scale=2) == "123.00"
+    check $newDecimal128(123.0, precision=6, scale=2) == "123.00"
+
+    expect ValueError:
+      let x = $newDecimal128(123, precision=4, scale=2)
+    expect ValueError:
+      let x = $newDecimal128("123.0000", precision=4, scale=2)
+    expect ValueError:
+      let x = $newDecimal128(123.0, precision=4, scale=2)

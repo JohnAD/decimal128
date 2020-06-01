@@ -10,19 +10,6 @@ Types
 
 
 
-.. _# ** Explaining Significand and It's Storage *.type:
-# ** Explaining Significand and It's Storage *
----------------------------------------------------------
-
-    .. code:: nim
-
-        # ** Explaining Significand and It's Storage **
-
-
-    source line: `171 <../src/decimal128.nim#L171>`__
-
-
-
 .. _CoefficientEncoding.type:
 CoefficientEncoding
 ---------------------------------------------------------
@@ -34,12 +21,13 @@ CoefficientEncoding
           ceBID
 
 
-    source line: `148 <../src/decimal128.nim#L148>`__
+    source line: `151 <../src/decimal128.nim#L151>`__
 
     The two coefficient (significand) storage formats supported by IEEE 754 2008.
     
-    ``ceDPD`` stands for Densely Packed Decimal
-    ``ceBID`` stands for Binary Integer Decimal
+    - ``ceDPD`` stands for Densely Packed Decimal
+    - ``ceBID`` stands for Binary Integer Decimal
+    
 
 
 .. _Decimal128.type:
@@ -56,12 +44,12 @@ Decimal128
           of dkInfinite:
 
 
-    source line: `155 <../src/decimal128.nim#L155>`__
+    source line: `159 <../src/decimal128.nim#L159>`__
 
     A Decimal128 decimal number. Limited to 34 digits.
     
     This is the nim-internal storage of the number. To import or export
-    use the corresponding ``newDecimal128`` and ``exportDecimal128`` procedures.
+    use the corresponding ``decodeDecimal128`` and ``encodeDecimal128`` procedures.
 
 
 
@@ -80,7 +68,7 @@ Procs, Methods, Iterators
 
         proc `!==`*(left: Decimal128, right: Decimal128): bool =
 
-    source line: `966 <../src/decimal128.nim#L966>`__
+    source line: `1231 <../src/decimal128.nim#L1231>`__
 
     Determint the inequality of two decimals, in terms of both numeric value
     and other characteristics such as significance. See ``proc `===` `` for
@@ -95,7 +83,7 @@ Procs, Methods, Iterators
 
         proc `$`*(d: Decimal128): string
 
-    source line: `224 <../src/decimal128.nim#L224>`__
+    source line: `246 <../src/decimal128.nim#L246>`__
 
 
 
@@ -107,7 +95,7 @@ Procs, Methods, Iterators
 
         proc `$`*(d: Decimal128): string =
 
-    source line: `973 <../src/decimal128.nim#L973>`__
+    source line: `1238 <../src/decimal128.nim#L1238>`__
 
     Express the Decimal128 value as a canonical string
 
@@ -120,7 +108,7 @@ Procs, Methods, Iterators
 
         proc `===`*(left: Decimal128, right: Decimal128): bool =
 
-    source line: `932 <../src/decimal128.nim#L932>`__
+    source line: `1197 <../src/decimal128.nim#L1197>`__
 
     Determines the equality of the two decimals, in terms of both
     numeric value and other characteristics such as significance.
@@ -144,7 +132,7 @@ decodeDecimal128
 
         proc decodeDecimal128*(data: string, encoding: CoefficientEncoding): Decimal128 =
 
-    source line: `457 <../src/decimal128.nim#L457>`__
+    source line: `578 <../src/decimal128.nim#L578>`__
 
     Parse the string to a Decimal128 using the IEEE754 2008 encoding with
     the coefficient stored as a unsigned binary integer in the last 113 bits.
@@ -179,7 +167,7 @@ encodeDecimal128
 
         proc encodeDecimal128*(value: Decimal128, encoding: CoefficientEncoding): string =
 
-    source line: `572 <../src/decimal128.nim#L572>`__
+    source line: `693 <../src/decimal128.nim#L693>`__
 
     Generate a sequence of bytes that matches the IEEE 754 2008 specification.
     
@@ -204,13 +192,36 @@ getPrecision
 
         proc getPrecision*(number: Decimal128): int =
 
-    source line: `396 <../src/decimal128.nim#L396>`__
+    source line: `516 <../src/decimal128.nim#L516>`__
 
     Get number of digits of precision (significance) of the decimal number.
     
     If a real number, then it will be a number between 1 and 34. Even a value of "0" has
     one digit of Precision.
-    A zero is only returned if the number is not-a-number (NaN) or if Infinity.
+    
+    A zero is returned if the number is not-a-number (NaN) or Infinity.
+
+
+.. _getScale.p:
+getScale
+---------------------------------------------------------
+
+    .. code:: nim
+
+        proc getScale*(number: Decimal128): int =
+
+    source line: `537 <../src/decimal128.nim#L537>`__
+
+    Get number of digits of the fractional part of the number. Or to put it differently:
+    get the number of decimals after the decimal point.
+    
+    If a real number, then it will be a number between -6143 and 6144.
+    
+    ``assert getScale(Decimal128("123.450")) == 3``
+    
+    ``assert getScale(Decimal128("1.2E3")) == -2``  # aka 1.2 x 10^3  or 1200
+    
+    A zero is returned if the number is not-a-number (NaN) or Infinity.
 
 
 .. _isInfinite.p:
@@ -221,7 +232,7 @@ isInfinite
 
         proc isInfinite*(number: Decimal128): bool =
 
-    source line: `288 <../src/decimal128.nim#L288>`__
+    source line: `310 <../src/decimal128.nim#L310>`__
 
     Returns true the number is infinite (positive or negative); otherwise false.
 
@@ -234,7 +245,7 @@ isNaN
 
         proc isNaN*(number: Decimal128): bool =
 
-    source line: `327 <../src/decimal128.nim#L327>`__
+    source line: `349 <../src/decimal128.nim#L349>`__
 
     Returns true the number is actually not a number (NaN); otherwise false.
 
@@ -247,7 +258,7 @@ isNegative
 
         proc isNegative*(number: Decimal128): bool =
 
-    source line: `255 <../src/decimal128.nim#L255>`__
+    source line: `277 <../src/decimal128.nim#L277>`__
 
     Returns true if the number is negative or is negative infinity; otherwise false.
 
@@ -260,7 +271,7 @@ isNegativeInfinity
 
         proc isNegativeInfinity*(number: Decimal128): bool =
 
-    source line: `313 <../src/decimal128.nim#L313>`__
+    source line: `335 <../src/decimal128.nim#L335>`__
 
     Returns true the number is infinite and negative; otherwise false.
 
@@ -273,7 +284,7 @@ isPositive
 
         proc isPositive*(number: Decimal128): bool =
 
-    source line: `266 <../src/decimal128.nim#L266>`__
+    source line: `288 <../src/decimal128.nim#L288>`__
 
     Returns true the number is positive or is positive infinity; otherwise false.
 
@@ -286,7 +297,7 @@ isPositiveInfinity
 
         proc isPositiveInfinity*(number: Decimal128): bool =
 
-    source line: `299 <../src/decimal128.nim#L299>`__
+    source line: `321 <../src/decimal128.nim#L321>`__
 
     Returns true the number is infinite and positive; otherwise false.
 
@@ -299,7 +310,7 @@ isReal
 
         proc isReal*(number: Decimal128): bool =
 
-    source line: `277 <../src/decimal128.nim#L277>`__
+    source line: `299 <../src/decimal128.nim#L299>`__
 
     Returns true the number has a real value; otherwise false.
 
@@ -312,7 +323,7 @@ nan
 
         proc nan*(): Decimal128 =
 
-    source line: `377 <../src/decimal128.nim#L377>`__
+    source line: `417 <../src/decimal128.nim#L417>`__
 
     Create a non-number aka NaN
 
@@ -323,9 +334,9 @@ newDecimal128
 
     .. code:: nim
 
-        proc newDecimal128*(str: string): Decimal128 =
+        proc newDecimal128*(str: string, precision: int = NOP, scale: int = NOP): Decimal128 =
 
-    source line: `622 <../src/decimal128.nim#L622>`__
+    source line: `1009 <../src/decimal128.nim#L1009>`__
 
     convert a string containing a decimal number to Decimal128
     
@@ -348,6 +359,26 @@ newDecimal128
     5. Any number in scientific notation using ``E`` as a prefix for the exponent.
        Examples: ``"-1423E+3"`` or ``"3.2232E-20"``.
     
+    If ``precision`` is passed a value (from 1 to 34), then the number is forced to use that precision. When
+    needed, additional decimal places are added to the right. For example, ``Decimal128("423.0", precision=6)`` is
+    the equivalant of "423.000" and ``Decimal128("423.0", precision=1)`` is "400", or more accurately, "4E2".
+    
+    If ``scale`` is passed a value (−6143 to +6144), then the number is forced to use the equivalent number
+    of digits before/after the decimal place. For example, ``Decimal128("423.0", scale=2)`` is the equivalent of
+    "423.00" and ``Decimal128("423.0", scale=-2)`` is "400", or more accurately, "4E2".
+    
+    If both ``precision`` and ``scale`` are passed, then the ``scale`` is first used, then a check is made: does the
+    resulting decimal value "fit" within the requested ``precision``? If not, a ValueError is raised.
+    
+    For example:
+    
+    ``let x = Decimal128("423.0", precision=6, scale=2)``
+    
+    works perfectly. "423.00" has a precision of 5, which is less than or equal to 6. But:
+    
+    ``let x = Deicmal128("73737", precision=6, scale=2)``
+    
+    will generate a ValueError at run-time since "73737.00" has a precision of 7.
 
 
 .. _newDecimal128.p:
@@ -356,11 +387,32 @@ newDecimal128
 
     .. code:: nim
 
-        proc newDecimal128*(value: float): Decimal128 =
+        proc newDecimal128*(value: float, precision: int = NOP, scale: int = NOP): Decimal128 =
 
-    source line: `850 <../src/decimal128.nim#L850>`__
+    source line: `1094 <../src/decimal128.nim#L1094>`__
 
     Convert a 64-bit floating point number to Decimal128
+    
+    If ``precision`` is passed a value (from 1 to 34), then the number is forced to use that precision. When
+    needed, additional decimal places are added to the right. For example, ``Decimal128(423.0, precision=6)`` is
+    the equivalant of "423.000" and ``Decimal128(423.0, precision=1)`` is "400", or more accurately, "4E2".
+    
+    If ``scale`` is passed a value (−6143 to +6144), then the number is forced to use the equivalent number
+    of digits before/after the decimal place. For example, ``Decimal128(423.0, scale=2)`` is the equivalent of
+    "423.00" and ``Decimal128(423.0, scale=-2)`` is "400", or more accurately, "4E2".
+    
+    If both ``precision`` and ``scale`` are passed, then the ``scale`` is first used, then a check is made: does the
+    resulting decimal value "fit" within the requested ``precision``? If not, a ValueError is raised.
+    
+    For example:
+    
+    ``let x = Decimal128(423.0, precision=6, scale=2)``
+    
+    works perfectly. "423.00" has a precision of 5, which is less than or equal to 6. But:
+    
+    ``let x = Deicmal128(73737.0, precision=6, scale=2)``
+    
+    will generate a ValueError at run-time since "73737.00" has a precision of 7.
 
 
 .. _newDecimal128.p:
@@ -369,14 +421,32 @@ newDecimal128
 
     .. code:: nim
 
-        proc newDecimal128*(value: int, precision: int): Decimal128 =
+        proc newDecimal128*(value: int, precision: int = NOP, scale: int = NOP): Decimal128 =
 
-    source line: `827 <../src/decimal128.nim#L827>`__
+    source line: `1068 <../src/decimal128.nim#L1068>`__
 
     Convert an integer to Decimal128
     
-    Because there is nothing "intrisic" to a binary integer to determine
-    precision, a precision parameter *must* be passed.
+    If ``precision`` is passed a value (from 1 to 34), then the number is forced to use that precision. When
+    needed, additional decimal places are added to the right. For example, ``Decimal128(423, precision=6)`` is
+    the equivalant of "423.000" and ``Decimal128(423, precision=1)`` is "400", or more accurately, "4E2".
+    
+    If ``scale`` is passed a value (−6143 to +6144), then the number is forced to use the equivalent number
+    of digits before/after the decimal place. For example, ``Decimal128(423, scale=2)`` is the equivalent of
+    "423.00" and ``Decimal128(423, scale=-2)`` is "400", or more accurately, "4E2".
+    
+    If both ``precision`` and ``scale`` are passed, then the ``scale`` is first used, then a check is made: does the
+    resulting decimal value "fit" within the requested ``precision``? If not, a ValueError is raised.
+    
+    For example:
+    
+    ``let x = Decimal128(423, precision=6, scale=2)``
+    
+    works perfectly. "423.00" has a precision of 5, which is less than or equal to 6. But:
+    
+    ``let x = Deicmal128(73737, precision=6, scale=2)``
+    
+    will generate a ValueError at run-time since "73737.00" has a precision of 7.
 
 
 .. _repr.p:
@@ -387,8 +457,42 @@ repr
 
         proc repr*(d: Decimal128): string =
 
-    source line: `226 <../src/decimal128.nim#L226>`__
+    source line: `248 <../src/decimal128.nim#L248>`__
 
+
+
+.. _setPrecision.p:
+setPrecision
+---------------------------------------------------------
+
+    .. code:: nim
+
+        proc setPrecision*(value: Decimal128, precision: int): Decimal128 =
+
+    source line: `952 <../src/decimal128.nim#L952>`__
+
+    Create a Decimal128 with the supplied precision.
+    
+    The supplied precision must be a value from 1 to 34.
+    
+    When NaN or Infinity is passed, the value is return as-is.
+
+
+.. _setScale.p:
+setScale
+---------------------------------------------------------
+
+    .. code:: nim
+
+        proc setScale*(value: Decimal128, scale: int): Decimal128 =
+
+    source line: `981 <../src/decimal128.nim#L981>`__
+
+    Create a Decimal128 with the supplied scale.
+    
+    The scale must be a value from −6143 to +6144
+    
+    When NaN or Infinity is passed, the value is return as-is.
 
 
 .. _toFloat.p:
@@ -399,7 +503,7 @@ toFloat
 
         proc toFloat*(value: Decimal128): float =
 
-    source line: `909 <../src/decimal128.nim#L909>`__
+    source line: `1174 <../src/decimal128.nim#L1174>`__
 
     Return the floating point equivalent of a decimal.
     
@@ -416,7 +520,7 @@ toInt
 
         proc toInt*(value: Decimal128): int =
 
-    source line: `886 <../src/decimal128.nim#L886>`__
+    source line: `1151 <../src/decimal128.nim#L1151>`__
 
     Return the integer part of a decimal as an int.
     
@@ -435,7 +539,7 @@ zero
 
         proc zero*(): Decimal128 =
 
-    source line: `369 <../src/decimal128.nim#L369>`__
+    source line: `401 <../src/decimal128.nim#L401>`__
 
     Create a Decimal128 value of positive zero
 
