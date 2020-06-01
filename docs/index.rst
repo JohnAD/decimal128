@@ -1,6 +1,6 @@
 Introduction to decimal128
 ==============================================================================
-ver 0.1.0
+ver 0.1.1
 
 This library creates a data type called ``Decimal128`` that allows one to
 store and manipulate decimal numbers.
