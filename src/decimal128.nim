@@ -64,22 +64,25 @@ proc nz(v: byte): bool =
   else:
     result = true
 
-proc nz(v: uint16): bool =
-  if v == 0.uint16:
-    result = false
-  else:
-    result = true
+# proc nz(v: uint16): bool =
+#   if v == 0.uint16:
+#     result = false
+#   else:
+#     result = true
 
 const
-  MAXIMUM_SIGNIFICAND: string = "10_000_000_000_000_000_000_000_000_000_000_000"
   SIGNIFICAND_SIZE: int = 34
+  TRANSIENT_SIGNIFICAND_SIZE: int = (34 * 2) + 2  # 70 digits
+  TRANSIENT_OFFSET: int = TRANSIENT_SIGNIFICAND_SIZE - SIGNIFICAND_SIZE
   BIAS: int16 = 6176
-  EXP_UPPER_BOUND: int16 = 0x3fff.int16 - BIAS  # 14 bits less bias
+  # EXP_UPPER_BOUND: int16 = 0x3fff.int16 - BIAS  # 14 bits less bias
   EXP_LOWER_BOUND: int16 = 0 - BIAS
   ALLZERO: array[SIGNIFICAND_SIZE, byte] = [0.byte, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  TALLZERO: array[TRANSIENT_SIGNIFICAND_SIZE, byte] = [0.byte, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.byte, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 const
   DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+  NOP: int = -999999999
 
 const
   #
@@ -94,52 +97,56 @@ const
   #
   #   starting with the combo fields first two bits (what I will call a "SHORTFLAG")...
   COMBO_SHORTFLAG_MASK_0: byte =             0b0110_0000
-  COMBO_SHORTFLAG_MEANS_0PREFIX_A: byte =    0b0000_0000
-  COMBO_SHORTFLAG_MEANS_0PREFIX_B: byte =    0b0010_0000
-  COMBO_SHORTFLAG_MEANS_0PREFIX_C: byte =    0b0100_0000
+  # COMBO_SHORTFLAG_MEANS_0PREFIX_A: byte =    0b0000_0000
+  # COMBO_SHORTFLAG_MEANS_0PREFIX_B: byte =    0b0010_0000
+  # COMBO_SHORTFLAG_MEANS_0PREFIX_C: byte =    0b0100_0000
   COMBO_SHORTFLAG_SIGNALS_MEDIUMFLAG: byte = 0b0110_0000
-  COMBO_SHORTFLAG_SIG_MASK_0: byte =         0b0000_0111
+  # COMBO_SHORTFLAG_SIG_MASK_0: byte =         0b0000_0111
   #
   COMBO_SHORTFLAG_EXPONENT_MASK_0: byte =    0b0111_1111 # 7 of 14
   COMBO_SHORTFLAG_EXPONENT_SHL_0: int =      7
-  COMBO_SHORTFLAG_EXPONENT_MASK_1: byte =    0b1111_1110 # 7 of 14
+  # COMBO_SHORTFLAG_EXPONENT_MASK_1: byte =    0b1111_1110 # 7 of 14
   COMBO_SHORTFLAG_EXPONENT_SHR_1: int =      1
   #
-  COMBO_SHORTFLAG_IMPLIED_PREFIX: byte =     0b0 # 1 bit implied; (math) 113 + 1 = 114 bits total
+  # COMBO_SHORTFLAG_IMPLIED_PREFIX: byte =     0b0 # 1 bit implied; (math) 113 + 1 = 114 bits total
   #
   #   when a "MEDIUMFLAG"...
   COMBO_MEDIUMFLAG_MASK_0: byte =            0b0111_1000
-  COMBO_MEDIUMFLAG_MEANS_100PREFIX_A: byte = 0b0110_0000 
-  COMBO_MEDIUMFLAG_MEANS_100PREFIX_B: byte = 0b0110_1000
-  COMBO_MEDIUMFLAG_MEANS_100PREFIX_C: byte = 0b0111_0000
+  # COMBO_MEDIUMFLAG_MEANS_100PREFIX_A: byte = 0b0110_0000 
+  # COMBO_MEDIUMFLAG_MEANS_100PREFIX_B: byte = 0b0110_1000
+  # COMBO_MEDIUMFLAG_MEANS_100PREFIX_C: byte = 0b0111_0000
   COMBO_MEDIUMFLAG_SIGNALS_LONGFLAG: byte =  0b0111_1000
   #
   COMBO_MEDIUMFLAG_EXPONENT_MASK_0: byte =   0b0001_1111 # first 5 bits of 14
   COMBO_MEDIUMFLAG_EXPONENT_SHL_0: int =     9
-  COMBO_MEDIUMFLAG_EXPONENT_MASK_1: byte =   0b1111_1111 # second 8 bits of 14
+  # COMBO_MEDIUMFLAG_EXPONENT_MASK_1: byte =   0b1111_1111 # second 8 bits of 14
   COMBO_MEDIUMFLAG_EXPONENT_SHL_1: int =     1
   COMBO_MEDIUMFLAG_EXPONENT_MASK_2: byte =   0b1000_0000 # last 1 bit of 14
   COMBO_MEDIUMFLAG_EXPONENT_SHR_2: int =     7
   #
-  COMBO_MEDIUMFLAG_SIG_MASK_2: byte =        0b0111_1111 # (math) 7 + (13*8) = 111 bits for significand
+  # COMBO_MEDIUMFLAG_SIG_MASK_2: byte =        0b0111_1111 # (math) 7 + (13*8) = 111 bits for significand
   #
-  COMBO_MEDIUMFLAG_IMPLIED_PREFIX: byte =    0b100 # 3 bits implied; (math) 111 + 3 = 114 bits total when DPD
+  # COMBO_MEDIUMFLAG_IMPLIED_PREFIX: byte =    0b100 # 3 bits implied; (math) 111 + 3 = 114 bits total when DPD
   #
   #   when a "LONGFLAG"...
   COMBO_LONGFLAG_MASK_0: byte =             0b0111_1100
   COMBO_LONGFLAG_MEANS_INFINITY: byte =     0b0111_1000
-  COMBO_LONGFLAG_MEANS_NAN: byte =          0b0111_1100
+  # COMBO_LONGFLAG_MEANS_NAN: byte =          0b0111_1100
   #
   #   when NAN...
-  COMBO_NAN_SIGNALING_MASK_0: byte =        0b0000_0010
-  COMBO_NAN_QUIET_NAN: byte =               0b0000_0000
+  # COMBO_NAN_SIGNALING_MASK_0: byte =        0b0000_0010
+  # COMBO_NAN_QUIET_NAN: byte =               0b0000_0000
   COMBO_NAN_SIGNALING_NAN: byte =           0b0000_0010
   #
   # for BSON style import/export
   #
-  BSON_STYLE_LEFT_MASK: uint64 =            0x003FFFFFFFFFFFFF'u64
+  # BSON_STYLE_LEFT_MASK: uint64 =            0x003FFFFFFFFFFFFF'u64
 
 type
+  PrecisionKind = enum
+    pkNatural,
+    pkPrecise,
+    pkScaled
   Decimal128Kind = enum
     # internal use: the state of the Decimal128 variable
     dkValued,
@@ -148,15 +155,16 @@ type
   CoefficientEncoding* = enum
     ## The two coefficient (significand) storage formats supported by IEEE 754 2008.
     ##
-    ## ``ceDPD`` stands for Densely Packed Decimal
-    ## ``ceBID`` stands for Binary Integer Decimal
+    ## - ``ceDPD`` stands for Densely Packed Decimal
+    ## - ``ceBID`` stands for Binary Integer Decimal
+    ##
     ceDPD,
     ceBID
   Decimal128* = object
     ## A Decimal128 decimal number. Limited to 34 digits.
     ##
     ## This is the nim-internal storage of the number. To import or export
-    ## use the corresponding ``newDecimal128`` and ``exportDecimal128`` procedures.
+    ## use the corresponding ``decodeDecimal128`` and ``encodeDecimal128`` procedures.
     negative: bool
     case kind: Decimal128Kind
     of dkNaN:
@@ -166,9 +174,27 @@ type
       exponent: int
     of dkInfinite:
       discard
+  Transient128 = object
+    # A temporary decimal number with 70 digits ((34 * 2) + 2)
+    #
+    # this number is NOT used outside the library. It is used as a "temporary"
+    # holder of value with higher resolution.
+    negative: bool
+    case kind: Decimal128Kind
+    of dkNaN:
+      signalling: bool
+    of dkValued:
+      significand: array[TRANSIENT_SIGNIFICAND_SIZE, byte]
+      exponent: int
+    of dkInfinite:
+      discard
+
+  # use of the term "scale":
+  #
+  # https://www.gnu.org/software/bc/manual/html_mono/bc.html#SEC5
 
   #
-  # ** Explaining Significand and It's Storage **
+  # Explaining Significand and It's Storage
   #
   # The word significand is also sometimes called a mantissa or significand.
   # It is the "details" part of a scientific notation number. For example, with
@@ -366,11 +392,29 @@ proc shiftDecimalsRight(values: array[SIGNIFICAND_SIZE, byte], shiftNeeded: int1
     result[0] = 0.byte
 
 
+proc shiftDecimalsRightTransient(values: array[TRANSIENT_SIGNIFICAND_SIZE, byte], shiftNeeded: int16): array[TRANSIENT_SIGNIFICAND_SIZE, byte] =
+  for index in 0 ..< TRANSIENT_SIGNIFICAND_SIZE:
+    result[index] = values[index]
+  for _ in 0 ..< shiftNeeded:
+    for index in 1 ..< TRANSIENT_SIGNIFICAND_SIZE:
+      let place = TRANSIENT_SIGNIFICAND_SIZE - index
+      result[place] = result[place - 1]
+    result[0] = 0.byte
+
+
 proc zero*(): Decimal128 =
   ## Create a Decimal128 value of positive zero
   result = Decimal128(kind: dkValued)
   result.negative = false
   result.significand = ALLZERO
+  result.exponent = 0
+
+
+proc transientZero(): Transient128 =
+  # Create a Transient128 value of positive zero
+  result = Transient128(kind: dkValued)
+  result.negative = false
+  result.significand = TALLZERO
   result.exponent = 0
 
 
@@ -380,8 +424,8 @@ proc nan*(): Decimal128 =
 
 
 proc digitCount(significand: array[SIGNIFICAND_SIZE, byte]): int =
-  # get the number of digits, ignoring the leading zeroes
-  # if all zeroes, then the answer is 1 the actual "0" in the number
+  # get the number of digits, ignoring the leading zeroes;
+  # special case: all zeroes results returns a result of zero
   result = 0
   var nonZeroFound = false
   for d in significand:
@@ -389,8 +433,88 @@ proc digitCount(significand: array[SIGNIFICAND_SIZE, byte]): int =
       nonZeroFound = true
     if nonZeroFound:
       result += 1
-  if result == 0:
-    result = 1
+
+
+proc digitCount(significand: array[TRANSIENT_SIGNIFICAND_SIZE, byte]): int =
+  # get the number of digits, ignoring the leading zeroes;
+  # special case: all zeroes results returns a result of zero
+  result = 0
+  var nonZeroFound = false
+  for d in significand:
+    if d != 0.byte:
+      nonZeroFound = true
+    if nonZeroFound:
+      result += 1
+
+
+proc bankersRoundingToEven(values: array[TRANSIENT_SIGNIFICAND_SIZE, byte]): (array[SIGNIFICAND_SIZE, byte], int) =
+  # used to round from the transient (interim) result to a final result with rounding
+  var sig: array[SIGNIFICAND_SIZE, byte]
+  let size = digitCount(values)
+  if size == 0:
+    result = (ALLZERO, 0)
+  elif size <= SIGNIFICAND_SIZE:
+    for index in 0 ..< SIGNIFICAND_SIZE:
+      sig[index] = values[index + TRANSIENT_OFFSET]
+    result = (sig, 0)
+  else:
+    #
+    # gather info needed for the rounding decision
+    #
+    var trimCount = size - SIGNIFICAND_SIZE
+    let keyDigitIndex = TRANSIENT_SIGNIFICAND_SIZE - trimCount
+    var AllZeroesFollowingKeyDigit: bool = true
+    if trimCount > 1:
+      for index in (keyDigitIndex + 1) ..< TRANSIENT_SIGNIFICAND_SIZE:
+        if values[index] > 0.byte:
+          AllZeroesFollowingKeyDigit = false
+    let keyDigit = values[keyDigitIndex]
+    #
+    # make a rounding decision
+    #
+    var roundUp: bool
+    if keyDigit < 5:         # ...123[4]12 becomes ...123
+      roundUp = false
+    elif keyDigit > 5:       # ...123[6]12 becomes ...124
+      roundUp = true
+    elif (keyDigit == 5) and (AllZeroesFollowingKeyDigit == false):  # ...123[5]12 becomes ...124
+      roundUp = true
+    else:    # keydigit == 5 and all zeroes followed the 5
+      let evenFlag = ((values[keyDigitIndex - 1] mod 2.byte) == 0.byte)  # is the last digit (before the key digit) even?
+      if evenFlag:
+        roundUp = false      # ...123[5]00 becomes ...124
+      else:
+        roundUp = true       # ...122[5]00 becomes ...122
+    #
+    # get result truncated (and detect problematic all-nines scenario)
+    #
+    var allNines = true
+    for index in 0 ..< SIGNIFICAND_SIZE:
+      sig[index] = values[index + TRANSIENT_OFFSET - trimCount]
+      if sig[index] != 9.byte:
+        allNines = false
+    #
+    # adjust if all-nines
+    #
+    if allNines:
+      sig[0] = 0.byte
+      trimCount += 1
+    #
+    # and do rounding
+    #
+    if roundUp:
+      var index = SIGNIFICAND_SIZE - 1 # start with last digit
+      for counter in 0 ..< SIGNIFICAND_SIZE:
+        sig[index] += 1.byte
+        if sig[index] < 10:
+          break  # done
+        else:
+          sig[index] = 0 # if it rounds up to "11", then set to zero and
+          index -= 1        # increment the previous digit
+    #
+    # done
+    #
+    result = (sig, trimCount)
 
 
 proc getPrecision*(number: Decimal128): int =
@@ -398,10 +522,36 @@ proc getPrecision*(number: Decimal128): int =
   ##
   ## If a real number, then it will be a number between 1 and 34. Even a value of "0" has
   ## one digit of Precision.
-  ## A zero is only returned if the number is not-a-number (NaN) or if Infinity.
+  ##
+  ## A zero is returned if the number is not-a-number (NaN) or Infinity.
   case number.kind:
   of dkValued:
     result = digitCount(number.significand)
+    if result == 0:  # only a true zero value can generate this
+      if number.exponent < 0:
+        result = -number.exponent
+      else:
+        result = 1
+  of dkInfinite:
+    result = 0
+  of dkNaN:
+    result = 0
+
+
+proc getScale*(number: Decimal128): int =
+  ## Get number of digits of the fractional part of the number. Or to put it differently:
+  ## get the number of decimals after the decimal point.
+  ##
+  ## If a real number, then it will be a number between -6143 and 6144.
+  ##
+  ## ``assert getScale(Decimal128("123.450")) == 3``
+  ##
+  ## ``assert getScale(Decimal128("1.2E3")) == -2``  # aka 1.2 x 10^3  or 1200
+  ##
+  ## A zero is returned if the number is not-a-number (NaN) or Infinity.
+  case number.kind:
+  of dkValued:
+    result = -number.exponent
   of dkInfinite:
     result = 0
   of dkNaN:
@@ -427,31 +577,6 @@ proc adjustExponent(number: Decimal128, newExponent: int, forgiveSmall = false):
     if not forgiveSmall:
       if result.significand == ALLZERO:
         raise newException(ValueError, "number too small to adjust")
-
-# proc normalized(number: Decimal128): Decimal128 =
-#   ## Returns an adjusted number so that it has:
-#   ##
-#   ## * the same number of significant digits
-#   ## * One leading digit of the mantissa when displayed in scientific notation
-#   ##
-#   ## So, for example:
-#   ##
-#   ##     123E+4  which is 123 x 10 ^ 4
-#   ##
-#   ## would become:
-#   ##
-#   ##     1.23E+6 which is 1.23 x 10 ^ 6
-#   ##
-#   ## Not all numbers can be normalized since we are maintaining significance (precision).
-#   ## If that is the case, a simple copy of the number is returned.
-#   ##
-#   ## NOTE: when used with a database, arbitrarily normalizing a decimal number
-#   ## before updating a record or document is often considered bad practice.
-#   ## For example, in MongoDB:
-#   ##   https://github.com/mongodb/specifications/blob/master/source/bson-decimal128/decimal128.rst#abstract
-#   let sig = number.getPrecision
-#   let exp = number.exponent.int
-#   let ideal = 
 
 
 proc decodeDecimal128*(data: string, encoding: CoefficientEncoding): Decimal128 =
@@ -619,28 +744,10 @@ proc encodeDecimal128*(value: Decimal128, encoding: CoefficientEncoding): string
     result = "7c000000000000000000000000000000".parseHexStr
 
 
-proc newDecimal128*(str: string): Decimal128 =
-  ## convert a string containing a decimal number to Decimal128
-  ##
-  ## A few parsing rules:
-  ##
-  ## * leading whitespace or invalid characters are ignored.
-  ## * invalid characters stop the conversion at that point.
-  ## * underscores (_) are ignored
-  ## * commas (,) are ignored
-  ## * only one period is expected.
-  ## * case is ignored
-  ##
-  ## The string can contain one of the following:
-  ##
-  ## 1. ``"Infinity"`` or ``"-Infinity"`` for positive/negative infinity.
-  ##    This can also be ``"+Infinity"`` or anything that starts with "inf"
-  ## 2. ``"NaN"`` for a Not-A-Number designation.
-  ## 3. Any simple decimal number, such as ``"12.34223"``.
-  ## 4. Any simple integer, such as ``"38923"`` or ``"-0236"``.
-  ## 5. Any number in scientific notation using ``E`` as a prefix for the exponent.
-  ##    Examples: ``"-1423E+3"`` or ``"3.2232E-20"``.
-  ## 
+
+proc parseFromString(str: string): Transient128 =
+  # used internally to parse a decimal string into a temporarary holding
+  # value.
   type
     ParseState = enum
       psPre,            # we haven't found the number yet
@@ -662,20 +769,20 @@ proc newDecimal128*(str: string): Decimal128 =
   let s = str.toLower().strip()
 
   if s.startsWith("nan"):
-    result = Decimal128(kind: dkNaN)
+    result = Transient128(kind: dkNaN)
     return
 
   if s.startsWith("+inf"):
-    result = Decimal128(kind: dkInfinite, negative: false)
+    result = Transient128(kind: dkInfinite, negative: false)
     return
   if s.startsWith("inf"):
-    result = Decimal128(kind: dkInfinite, negative: false)
+    result = Transient128(kind: dkInfinite, negative: false)
     return
   if s.startsWith("-inf"):
-    result = Decimal128(kind: dkInfinite, negative: true)
+    result = Transient128(kind: dkInfinite, negative: true)
     return
 
-  result = zero()
+  result = transientZero()
   var state: ParseState = psPre
   var legit = false
   var digitList: seq[byte] = @[]
@@ -786,24 +893,28 @@ proc newDecimal128*(str: string): Decimal128 =
     of psDone:
       discard
   #
-  # move the digits into the right-aligned significand
+  # remove leading zeroes
   #
-  # if too large, safely remove leading zeros
-  if digitList.len > SIGNIFICAND_SIZE:
-    var nonZeroFound = false
-    var temp: seq[byte] = @[]
-    for val in digitList:
-      if val != 0.byte:
-        nonZeroFound = true
-      if nonZeroFound:
-        temp.add val
-    digitList = temp
-  # if still too large, removing trailing digits. AKA "clamping"
-  if digitList.len > SIGNIFICAND_SIZE:
-    let digitsToRemove = digitList.len - SIGNIFICAND_SIZE
-    digitList = digitList[0 ..< SIGNIFICAND_SIZE]
+  var nonZeroFound = false
+  var temp: seq[byte] = @[]
+  for val in digitList:
+    if val != 0.byte:
+      nonZeroFound = true
+    if nonZeroFound:
+      temp.add val
+  digitList = temp
+  #
+  # if too many digits, removing trailing digits.
+  # Note: because this is on 70-digit Transient, simple "truncation" is good enough
+  #
+  if digitList.len > TRANSIENT_SIGNIFICAND_SIZE:
+    let digitsToRemove = digitList.len - TRANSIENT_SIGNIFICAND_SIZE
+    digitList = digitList[0 ..< TRANSIENT_SIGNIFICAND_SIZE]
     result.exponent += digitsToRemove
-  let offset = SIGNIFICAND_SIZE - digitList.len
+  #
+  # move to result to final significand
+  #
+  let offset = TRANSIENT_SIGNIFICAND_SIZE - digitList.len
   for index, val in digitList:
     result.significand[index + offset] = val
   #
@@ -818,33 +929,113 @@ proc newDecimal128*(str: string): Decimal128 =
         result.exponent += exp
       if result.exponent < EXP_LOWER_BOUND:
         let shiftNeeded = (EXP_LOWER_BOUND - result.exponent).int16
-        result.significand = shiftDecimalsRight(result.significand, shiftNeeded)
+        result.significand = shiftDecimalsRightTransient(result.significand, shiftNeeded)
         result.exponent += shiftNeeded
     except:
       discard
 
 
-proc newDecimal128*(value: int, precision: int): Decimal128 =
+proc convertTransientToDecimal128(t: Transient128): Decimal128 =
+  # convert from internal Transient128 to public Decimal128
+  # it will "clamp" the value with Bankers Rounding if needed.
+  case t.kind:
+  of dkValued:
+    result = Decimal128(kind: dkValued)
+    result.negative = t.negative
+    var trimmed = 0
+    (result.significand, trimmed) = bankersRoundingToEven(t.significand)
+    result.exponent = t.exponent + trimmed
+  of dkInfinite:
+    result = Decimal128(kind: dkInfinite)
+    result.negative = t.negative
+  of dkNaN:
+    result = Decimal128(kind: dkNaN)
+    result.signalling = t.signalling
+  
+
+proc newDecimal128*(str: string): Decimal128 =
+  ## convert a string containing a decimal number to Decimal128
+  ##
+  ## A few parsing rules:
+  ##
+  ## * leading whitespace or invalid characters are ignored.
+  ## * invalid characters stop the conversion at that point.
+  ## * underscores (_) are ignored
+  ## * commas (,) are ignored
+  ## * only one period is expected.
+  ## * case is ignored
+  ##
+  ## The string can contain one of the following:
+  ##
+  ## 1. ``"Infinity"`` or ``"-Infinity"`` for positive/negative infinity.
+  ##    This can also be ``"+Infinity"`` or anything that starts with "inf"
+  ## 2. ``"NaN"`` for a Not-A-Number designation.
+  ## 3. Any simple decimal number, such as ``"12.34223"``.
+  ## 4. Any simple integer, such as ``"38923"`` or ``"-0236"``.
+  ## 5. Any number in scientific notation using ``E`` as a prefix for the exponent.
+  ##    Examples: ``"-1423E+3"`` or ``"3.2232E-20"``.
+  ## 
+  let t = parseFromString(str)
+  result = convertTransientToDecimal128(t)
+
+
+proc newDecimal128*(value: int, precision: int = NOP, scale: int = NOP): Decimal128 =
   ## Convert an integer to Decimal128
   ##
-  ## Because there is nothing "intrisic" to a binary integer to determine
-  ## precision, a precision parameter *must* be passed.
-  var precisionToUse = precision
-  if precision < 1:
-    raise newException(ValueError, "precision cannot be less than 1. $1 was tried.".format(precision))
-  if precision > 34:
-    precisionToUse = 34    
+  ## If ``precision`` is passed a value (from 1 to 34), then the integer is forced to use that precision. When
+  ## needed, additional decimal places are added to the right. For example, ``Decimal128(423, precision=6)`` is
+  ## the equivalant of "423.000" and ``Decimal128(423, precision=1)`` is "400", or more accurately, "4E2".
+  ##
+  ## If ``scale`` is passed a value (−6143 to +6144), then the integer is forced to use the equivalent number
+  ## of digits before/after the decimal place. For example, ``Decimal128(423, scale=2)`` is the equivalent of
+  ## "423.00" and ``Decimal128(423, scale=-2)`` is "400", or more accurately, "4E2".
+  ##
+  ## If both ``precision`` and ``scale`` are passed, a ValueError is raised.
   result = newDecimal128($value)
-  let nativePrecision = result.getPrecision
-  if nativePrecision == precisionToUse:
-    return
-  let shiftNeeded = (nativePrecision - precisionToUse).int16
-  if shiftNeeded > 0:
-    result.significand = shiftDecimalsRight(result.significand, shiftNeeded)
-    result.exponent += shiftNeeded
+  #
+  var precisionChoice: PrecisionKind
+  if (precision != NOP) and (scale != NOP):
+    raise newException(ValueError, "You cannot provide both \"precision\" and \"scale\" to newDecimal128")
+  if precision != NOP:
+    precisionChoice = pkPrecise
+  elif scale != NOP:
+    precisionChoice = pkScaled
   else:
-    result.significand = shiftDecimalsLeft(result.significand, -shiftNeeded)
-    result.exponent += shiftNeeded
+    precisionChoice = pkNatural
+  #
+  # make adjustment
+  #
+  case precisionChoice:
+  of pkNatural:
+    discard  # nothing to do
+  of pkPrecise:
+    var precisionToUse = precision
+    if precision < 1:
+      raise newException(ValueError, "precision cannot be less than 1. $1 was tried.".format(precision))
+    if precision > 34:
+      precisionToUse = 34    
+    let nativePrecision = result.getPrecision
+    if nativePrecision != precisionToUse:
+      let shiftNeeded = (nativePrecision - precisionToUse).int16
+      if shiftNeeded > 0:
+        result.significand = shiftDecimalsRight(result.significand, shiftNeeded)
+        result.exponent += shiftNeeded
+      else:
+        result.significand = shiftDecimalsLeft(result.significand, -shiftNeeded)
+        result.exponent += shiftNeeded
+  of pkScaled:
+    discard
+    let negLimit = 0 - 6143  # honestly, I don't know why this is needed.
+    if scale < negLimit:
+      raise newException(ValueError, "scale cannot be less than -6143. $1 was tried.".format(scale))
+    if scale > 6144:
+      raise newException(ValueError, "scale cannot be greater than 6144. $1 was tried.".format(scale))
+    if scale != 0:  # the "natural" scale of an integer is zero; always
+      if scale > 0:
+        result.significand = shiftDecimalsLeft(result.significand, scale.int16)
+      else:
+        result.significand = shiftDecimalsRight(result.significand, -(scale.int16))
+      result.exponent -= scale
 
 
 proc newDecimal128*(value: float): Decimal128 =
@@ -975,7 +1166,7 @@ proc `$`*(d: Decimal128): string =
   case d.kind:
   of dkValued:
     # TODO: finish
-    let digitLen = digitCount(d.significand)
+    # let digitLen = digitCount(d.significand)
     if d.negative:
       result = "-"
     else:

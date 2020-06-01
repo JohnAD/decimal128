@@ -223,19 +223,19 @@ suite "IEEE 754-2008 with BID encoding":
       "0.00123400000000000000000000000000000000000" # should "trim" back to 34
     ]
     resultLossy = false
-    conversionTest(24, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
+    conversionTest(25, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
 
     # Regular - -0.0",
     canonicalHexBin = "B03E0000000000000000000000000000"
     canonicalStr = "-0.0"
     resultLossy = false
-    conversionTest(25, canonicalHexBin, canonicalStr, resultLossy, @[])
+    conversionTest(26, canonicalHexBin, canonicalStr, resultLossy, @[])
 
     # Regular - 2.000
     canonicalHexBin = "303A00000000000000000000000007D0"
     canonicalStr = "2.000"
     resultLossy = false
-    conversionTest(26, canonicalHexBin, canonicalStr, resultLossy, @[])
+    conversionTest(27, canonicalHexBin, canonicalStr, resultLossy, @[])
 
     # Scientific - Tiniest
     canonicalHexBin = "0001ED09BEAD87C0378D8E63FFFFFFFF"
@@ -244,13 +244,13 @@ suite "IEEE 754-2008 with BID encoding":
       "9.9999999999999999999999999999999999999999E-6143" # should "clamp" back to 34 nines
     ]
     resultLossy = false
-    conversionTest(27, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
+    conversionTest(28, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
 
     # Scientific - Tiny
     canonicalHexBin = "00000000000000000000000000000001"
     canonicalStr = "1E-6176"
     resultLossy = false
-    conversionTest(28, canonicalHexBin, canonicalStr, resultLossy, @[])
+    conversionTest(29, canonicalHexBin, canonicalStr, resultLossy, @[])
 
     # Scientific - Negative Tiny
     canonicalHexBin = "80000000000000000000000000000001"
@@ -259,13 +259,13 @@ suite "IEEE 754-2008 with BID encoding":
       "-10E-6177"  
     ]
     resultLossy = false
-    conversionTest(29, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
+    conversionTest(30, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
 
     # Scientific - Adjusted Exponent Limit
     canonicalHexBin = "2FF03CDE6FFF9732DE825CD07E96AFF2"
     canonicalStr = "1.234567890123456789012345678901234E-7"
     resultLossy = false
-    conversionTest(30, canonicalHexBin, canonicalStr, resultLossy, @[])
+    conversionTest(31, canonicalHexBin, canonicalStr, resultLossy, @[])
 
     # Scientific - Fractional
     canonicalHexBin = "B02C0000000000000000000000000064"
@@ -274,19 +274,19 @@ suite "IEEE 754-2008 with BID encoding":
       "-100E-10"
     ]
     resultLossy = false
-    conversionTest(31, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
+    conversionTest(32, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
 
     # Scientific - 0 with Exponent
     canonicalHexBin = "5F200000000000000000000000000000"
     canonicalStr = "0E+6000"
     resultLossy = false
-    conversionTest(32, canonicalHexBin, canonicalStr, resultLossy, @[])
+    conversionTest(33, canonicalHexBin, canonicalStr, resultLossy, @[])
 
     # Scientific - 0 with Negative Exponent
     canonicalHexBin = "2B7A0000000000000000000000000000"
     canonicalStr = "0E-611"
     resultLossy = false
-    conversionTest(33, canonicalHexBin, canonicalStr, resultLossy, @[])
+    conversionTest(34, canonicalHexBin, canonicalStr, resultLossy, @[])
 
     # Scientific - No Decimal with Signed Exponent
     canonicalHexBin = "30460000000000000000000000000001"
@@ -296,37 +296,37 @@ suite "IEEE 754-2008 with BID encoding":
       "1e3"
     ]
     resultLossy = false
-    conversionTest(34, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
+    conversionTest(35, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
 
     # Scientific - Trailing Zero
     canonicalHexBin = "3042000000000000000000000000041A"
     canonicalStr = "1.050E+4"
     resultLossy = false
-    conversionTest(35, canonicalHexBin, canonicalStr, resultLossy, @[])
+    conversionTest(36, canonicalHexBin, canonicalStr, resultLossy, @[])
 
     # Scientific - With Decimal
     canonicalHexBin = "30420000000000000000000000000069"
     canonicalStr = "1.05E+3"
     resultLossy = false
-    conversionTest(36, canonicalHexBin, canonicalStr, resultLossy, @[])
+    conversionTest(37, canonicalHexBin, canonicalStr, resultLossy, @[])
 
     # Scientific - Full
     canonicalHexBin = "3040FFFFFFFFFFFFFFFFFFFFFFFFFFFF"
     canonicalStr = "5192296858534827628530496329220095"
     resultLossy = false
-    conversionTest(37, canonicalHexBin, canonicalStr, resultLossy, @[])
+    conversionTest(38, canonicalHexBin, canonicalStr, resultLossy, @[])
 
     # Scientific - Large
     canonicalHexBin = "5FFE314DC6448D9338C15B0A00000000"
     canonicalStr = "1.000000000000000000000000000000000E+6144"
     resultLossy = false
-    conversionTest(38, canonicalHexBin, canonicalStr, resultLossy, @[])
+    conversionTest(39, canonicalHexBin, canonicalStr, resultLossy, @[])
 
     # Scientific - Largest
     canonicalHexBin = "5FFFED09BEAD87C0378D8E63FFFFFFFF"
     canonicalStr = "9.999999999999999999999999999999999E+6144"
     resultLossy = false
-    conversionTest(39, canonicalHexBin, canonicalStr, resultLossy, @[])
+    conversionTest(40, canonicalHexBin, canonicalStr, resultLossy, @[])
 
     # Non-Canonical Parsing - Long Decimal String
     canonicalStr = "1E-999"
@@ -335,7 +335,7 @@ suite "IEEE 754-2008 with BID encoding":
       ".000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
     ]
     resultLossy = false
-    conversionTest(40, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
+    conversionTest(41, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
 
     # Non-Canonical Parsing - Long Significand with Exponent
     canonicalHexBin = "305800000000029D42DA3A76F9E0D979"
@@ -344,7 +344,7 @@ suite "IEEE 754-2008 with BID encoding":
       "12345689012345789012345E+12"
     ]
     resultLossy = false
-    conversionTest(41, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
+    conversionTest(42, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
 
     # Exact rounding
     canonicalHexBin = "37CC314DC6448D9338C15B0A00000000"
@@ -353,7 +353,7 @@ suite "IEEE 754-2008 with BID encoding":
       "1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
     ]
     resultLossy = false
-    conversionTest(42, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
+    conversionTest(43, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
 
     # from "Clamped" check in other test suite, but ... corrected?
     canonicalHexBin = "5FFE000000000000000000000000000A"
@@ -362,5 +362,5 @@ suite "IEEE 754-2008 with BID encoding":
       "10E6111"
     ]
     resultLossy = false
-    conversionTest(43, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
+    conversionTest(44, canonicalHexBin, canonicalStr, resultLossy, nonCanonicalStrs)
 

@@ -8,11 +8,7 @@ import strformat
 import unicode
 
 const
-  MAXIMUM_SIGNIFICAND: string = "10_000_000_000_000_000_000_000_000_000_000_000"
   MAX_DIGITS: int = 34
-
-const
-  DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
 
 type
   uint113* = object
@@ -43,43 +39,43 @@ proc setRightHalf(value: var uint64, newValue: uint64) =
 
 const
   MASK_FOR_LEFT_ON_113BITS: uint64 = 0x0001FFFFFFFFFFFF'u64
-  MAX_DECIMAL = uint113(left: 0x0001_ED09_BEAD_87C0'u64, right: 0x378D_8E63_FFFF_FFFF'u64) # 34 decimals of '9' is hex 1 ED09 BEAD 87C0 378D 8E63 FFFF FFFF
-  POWER_OF_TEN: seq[uint113] = @[
-    uint113(left: 0x0000_314D_C644_8D93'u64, right: 0x38C1_5B0A_0000_0000'u64), # 10 ^ 33 = hex 314D C644 8D93 38C1 5B0A 0000 0000
-    uint113(left: 0x0000_04EE_2D6D_415B'u64, right: 0x85AC_EF81_0000_0000'u64), # 10 ^ 32 = hex 4EE 2D6D 415B 85AC EF81 0000 0000
-    uint113(left: 0x0000_007E_37BE_2022'u64, right: 0xC091_4B26_8000_0000'u64), # 10 ^ 31 = hex 7E 37BE 2022 C091 4B26 8000 0000
-    uint113(left: 0x0000_000C_9F2C_9CD0'u64, right: 0x4674_EDEA_4000_0000'u64), # 10 ^ 30 = hex C 9F2C 9CD0 4674 EDEA 4000 0000
-    uint113(left: 0x0000_0001_431E_0FAE'u64, right: 0x6D72_17CA_A000_0000'u64), # 10 ^ 29 = hex 1 431E 0FAE 6D72 17CA A000 0000
-    uint113(left: 0x0000_0000_204F_CE5E'u64, right: 0x3E25_0261_1000_0000'u64), # 10 ^ 28 = hex 204F CE5E 3E25 0261 1000 0000
-    uint113(left: 0x0000_0000_033B_2E3C'u64, right: 0x9FD0_803C_E800_0000'u64), # 10 ^ 27 = hex 33B 2E3C 9FD0 803C E800 0000
-    uint113(left: 0x0000_0000_0052_B7D2'u64, right: 0xDCC8_0CD2_E400_0000'u64), # 10 ^ 26 = hex 52 B7D2 DCC8 0CD2 E400 0000
-    uint113(left: 0x0000_0000_0008_4595'u64, right: 0x1614_0148_4A00_0000'u64), # 10 ^ 25 = hex 8 4595 1614 0148 4A00 0000
-    uint113(left: 0x0000_0000_0000_D3C2'u64, right: 0x1BCE_CCED_A100_0000'u64), # 10 ^ 24 = hex D3C2 1BCE CCED A100 0000
-    uint113(left: 0x0000_0000_0000_152D'u64, right: 0x02C7_E14A_F680_0000'u64), # 10 ^ 23 = hex 152D 02C7 E14A F680 0000
-    uint113(left: 0x0000_0000_0000_021E'u64, right: 0x19E0_C9BA_B240_0000'u64), # 10 ^ 22 = hex 21E 19E0 C9BA B240 0000
-    uint113(left: 0x0000_0000_0000_0036'u64, right: 0x35C9_ADC5_DEA0_0000'u64), # 10 ^ 21 = hex 36 35C9 ADC5 DEA0 0000
-    uint113(left: 0x0000_0000_0000_0005'u64, right: 0x6BC7_5E2D_6310_0000'u64), # 10 ^ 20 = hex 5 6BC7 5E2D 6310 0000
-    uint113(left: 0x0000_0000_0000_0000'u64, right: 0x8AC7_2304_89E8_0000'u64), # 10 ^ 19 = hex 8AC7 2304 89E8 0000
-    uint113(left: 0'u64, right: 1000000000000000000'u64), # 10 ^ 18
-    uint113(left: 0'u64, right: 100000000000000000'u64), # 10 ^ 17
-    uint113(left: 0'u64, right: 10000000000000000'u64), # 10 ^ 16
-    uint113(left: 0'u64, right: 1000000000000000'u64), # 10 ^ 15
-    uint113(left: 0'u64, right: 100000000000000'u64), # 10 ^ 14
-    uint113(left: 0'u64, right: 10000000000000'u64), # 10 ^ 13
-    uint113(left: 0'u64, right: 1000000000000'u64), # 10 ^ 12
-    uint113(left: 0'u64, right: 100000000000'u64), # 10 ^ 11
-    uint113(left: 0'u64, right: 10000000000'u64), # 10 ^ 10
-    uint113(left: 0'u64, right: 1000000000'u64), # 10 ^ 9
-    uint113(left: 0'u64, right: 100000000'u64), # 10 ^ 8
-    uint113(left: 0'u64, right: 10000000'u64), # 10 ^ 7
-    uint113(left: 0'u64, right: 1000000'u64), # 10 ^ 6
-    uint113(left: 0'u64, right: 100000'u64), # 10 ^ 5
-    uint113(left: 0'u64, right: 10000'u64), # 10 ^ 4
-    uint113(left: 0'u64, right: 1000'u64), # 10 ^ 3
-    uint113(left: 0'u64, right: 100'u64), # 10 ^ 2
-    uint113(left: 0'u64, right: 10'u64), # 10 ^ 1
-    uint113(left: 0'u64, right: 1'u64)  # 10 ^ 0
-  ]
+  # MAX_DECIMAL = uint113(left: 0x0001_ED09_BEAD_87C0'u64, right: 0x378D_8E63_FFFF_FFFF'u64) # 34 decimals of '9' is hex 1 ED09 BEAD 87C0 378D 8E63 FFFF FFFF
+  # POWER_OF_TEN: seq[uint113] = @[
+  #   uint113(left: 0x0000_314D_C644_8D93'u64, right: 0x38C1_5B0A_0000_0000'u64), # 10 ^ 33 = hex 314D C644 8D93 38C1 5B0A 0000 0000
+  #   uint113(left: 0x0000_04EE_2D6D_415B'u64, right: 0x85AC_EF81_0000_0000'u64), # 10 ^ 32 = hex 4EE 2D6D 415B 85AC EF81 0000 0000
+  #   uint113(left: 0x0000_007E_37BE_2022'u64, right: 0xC091_4B26_8000_0000'u64), # 10 ^ 31 = hex 7E 37BE 2022 C091 4B26 8000 0000
+  #   uint113(left: 0x0000_000C_9F2C_9CD0'u64, right: 0x4674_EDEA_4000_0000'u64), # 10 ^ 30 = hex C 9F2C 9CD0 4674 EDEA 4000 0000
+  #   uint113(left: 0x0000_0001_431E_0FAE'u64, right: 0x6D72_17CA_A000_0000'u64), # 10 ^ 29 = hex 1 431E 0FAE 6D72 17CA A000 0000
+  #   uint113(left: 0x0000_0000_204F_CE5E'u64, right: 0x3E25_0261_1000_0000'u64), # 10 ^ 28 = hex 204F CE5E 3E25 0261 1000 0000
+  #   uint113(left: 0x0000_0000_033B_2E3C'u64, right: 0x9FD0_803C_E800_0000'u64), # 10 ^ 27 = hex 33B 2E3C 9FD0 803C E800 0000
+  #   uint113(left: 0x0000_0000_0052_B7D2'u64, right: 0xDCC8_0CD2_E400_0000'u64), # 10 ^ 26 = hex 52 B7D2 DCC8 0CD2 E400 0000
+  #   uint113(left: 0x0000_0000_0008_4595'u64, right: 0x1614_0148_4A00_0000'u64), # 10 ^ 25 = hex 8 4595 1614 0148 4A00 0000
+  #   uint113(left: 0x0000_0000_0000_D3C2'u64, right: 0x1BCE_CCED_A100_0000'u64), # 10 ^ 24 = hex D3C2 1BCE CCED A100 0000
+  #   uint113(left: 0x0000_0000_0000_152D'u64, right: 0x02C7_E14A_F680_0000'u64), # 10 ^ 23 = hex 152D 02C7 E14A F680 0000
+  #   uint113(left: 0x0000_0000_0000_021E'u64, right: 0x19E0_C9BA_B240_0000'u64), # 10 ^ 22 = hex 21E 19E0 C9BA B240 0000
+  #   uint113(left: 0x0000_0000_0000_0036'u64, right: 0x35C9_ADC5_DEA0_0000'u64), # 10 ^ 21 = hex 36 35C9 ADC5 DEA0 0000
+  #   uint113(left: 0x0000_0000_0000_0005'u64, right: 0x6BC7_5E2D_6310_0000'u64), # 10 ^ 20 = hex 5 6BC7 5E2D 6310 0000
+  #   uint113(left: 0x0000_0000_0000_0000'u64, right: 0x8AC7_2304_89E8_0000'u64), # 10 ^ 19 = hex 8AC7 2304 89E8 0000
+  #   uint113(left: 0'u64, right: 1000000000000000000'u64), # 10 ^ 18
+  #   uint113(left: 0'u64, right: 100000000000000000'u64), # 10 ^ 17
+  #   uint113(left: 0'u64, right: 10000000000000000'u64), # 10 ^ 16
+  #   uint113(left: 0'u64, right: 1000000000000000'u64), # 10 ^ 15
+  #   uint113(left: 0'u64, right: 100000000000000'u64), # 10 ^ 14
+  #   uint113(left: 0'u64, right: 10000000000000'u64), # 10 ^ 13
+  #   uint113(left: 0'u64, right: 1000000000000'u64), # 10 ^ 12
+  #   uint113(left: 0'u64, right: 100000000000'u64), # 10 ^ 11
+  #   uint113(left: 0'u64, right: 10000000000'u64), # 10 ^ 10
+  #   uint113(left: 0'u64, right: 1000000000'u64), # 10 ^ 9
+  #   uint113(left: 0'u64, right: 100000000'u64), # 10 ^ 8
+  #   uint113(left: 0'u64, right: 10000000'u64), # 10 ^ 7
+  #   uint113(left: 0'u64, right: 1000000'u64), # 10 ^ 6
+  #   uint113(left: 0'u64, right: 100000'u64), # 10 ^ 5
+  #   uint113(left: 0'u64, right: 10000'u64), # 10 ^ 4
+  #   uint113(left: 0'u64, right: 1000'u64), # 10 ^ 3
+  #   uint113(left: 0'u64, right: 100'u64), # 10 ^ 2
+  #   uint113(left: 0'u64, right: 10'u64), # 10 ^ 1
+  #   uint113(left: 0'u64, right: 1'u64)  # 10 ^ 0
+  # ]
   BILLION: uint32 = 1000 * 1000 * 1000 # a billion has 10 digits and fits into 32 bits
   HUNDRED_QUADRILLION: uint64 = 100_000_000_000_000_000'u64 # 1 followed by 17 zeroes
 
