@@ -68,7 +68,7 @@ Procs, Methods, Iterators
 
         proc `!==`*(left: Decimal128, right: Decimal128): bool =
 
-    source line: `1227 <../src/decimal128.nim#L1227>`__
+    source line: `1280 <../src/decimal128.nim#L1280>`__
 
     Determint the inequality of two decimals, in terms of both numeric value
     and other characteristics such as significance. See ``proc `===` `` for
@@ -95,9 +95,33 @@ Procs, Methods, Iterators
 
         proc `$`*(d: Decimal128): string =
 
-    source line: `1234 <../src/decimal128.nim#L1234>`__
+    source line: `1287 <../src/decimal128.nim#L1287>`__
 
     Express the Decimal128 value as a canonical string
+
+
+.. _`+`.p:
+`+`
+---------------------------------------------------------
+
+    .. code:: nim
+
+        proc `+`*(left: Decimal128, right: Decimal128): Decimal128 =
+
+    source line: `1354 <../src/decimal128.nim#L1354>`__
+
+
+
+.. _`-`.p:
+`-`
+---------------------------------------------------------
+
+    .. code:: nim
+
+        proc `-`*(left: Decimal128, right: Decimal128): Decimal128 =
+
+    source line: `1373 <../src/decimal128.nim#L1373>`__
+
 
 
 .. _`===`.p:
@@ -108,7 +132,7 @@ Procs, Methods, Iterators
 
         proc `===`*(left: Decimal128, right: Decimal128): bool =
 
-    source line: `1193 <../src/decimal128.nim#L1193>`__
+    source line: `1246 <../src/decimal128.nim#L1246>`__
 
     Determines the equality of the two decimals, in terms of both
     numeric value and other characteristics such as significance.
@@ -132,7 +156,7 @@ decodeDecimal128
 
         proc decodeDecimal128*(data: string, encoding: CoefficientEncoding): Decimal128 =
 
-    source line: `574 <../src/decimal128.nim#L574>`__
+    source line: `611 <../src/decimal128.nim#L611>`__
 
     Parse the string to a Decimal128 using the IEEE754 2008 encoding with
     the coefficient stored as a unsigned binary integer in the last 113 bits.
@@ -167,7 +191,7 @@ encodeDecimal128
 
         proc encodeDecimal128*(value: Decimal128, encoding: CoefficientEncoding): string =
 
-    source line: `689 <../src/decimal128.nim#L689>`__
+    source line: `726 <../src/decimal128.nim#L726>`__
 
     Generate a sequence of bytes that matches the IEEE 754 2008 specification.
     
@@ -192,7 +216,7 @@ getPrecision
 
         proc getPrecision*(number: Decimal128): int =
 
-    source line: `512 <../src/decimal128.nim#L512>`__
+    source line: `521 <../src/decimal128.nim#L521>`__
 
     Get number of digits of precision (significance) of the decimal number.
     
@@ -210,7 +234,7 @@ getScale
 
         proc getScale*(number: Decimal128): int =
 
-    source line: `533 <../src/decimal128.nim#L533>`__
+    source line: `542 <../src/decimal128.nim#L542>`__
 
     Get number of digits of the fractional part of the number. Or to put it differently:
     get the number of decimals after the decimal point.
@@ -222,6 +246,18 @@ getScale
     ``assert getScale(Decimal128("1.2E3")) == -2``  # aka 1.2 x 10^3  or 1200
     
     A zero is returned if the number is not-a-number (NaN) or Infinity.
+
+
+.. _getScale.p:
+getScale
+---------------------------------------------------------
+
+    .. code:: nim
+
+        proc getScale*(number: Transient128): int =
+
+    source line: `562 <../src/decimal128.nim#L562>`__
+
 
 
 .. _isInfinite.p:
@@ -323,7 +359,7 @@ nan
 
         proc nan*(): Decimal128 =
 
-    source line: `413 <../src/decimal128.nim#L413>`__
+    source line: `422 <../src/decimal128.nim#L422>`__
 
     Create a non-number aka NaN
 
@@ -336,7 +372,7 @@ newDecimal128
 
         proc newDecimal128*(str: string, precision: int = NOP, scale: int = NOP): Decimal128 =
 
-    source line: `1005 <../src/decimal128.nim#L1005>`__
+    source line: `1042 <../src/decimal128.nim#L1042>`__
 
     convert a string containing a decimal number to Decimal128
     
@@ -389,7 +425,7 @@ newDecimal128
 
         proc newDecimal128*(value: float, precision: int = NOP, scale: int = NOP): Decimal128 =
 
-    source line: `1090 <../src/decimal128.nim#L1090>`__
+    source line: `1127 <../src/decimal128.nim#L1127>`__
 
     Convert a 64-bit floating point number to Decimal128
     
@@ -423,7 +459,7 @@ newDecimal128
 
         proc newDecimal128*(value: int, precision: int = NOP, scale: int = NOP): Decimal128 =
 
-    source line: `1064 <../src/decimal128.nim#L1064>`__
+    source line: `1101 <../src/decimal128.nim#L1101>`__
 
     Convert an integer to Decimal128
     
@@ -469,7 +505,7 @@ setPrecision
 
         proc setPrecision*(value: Decimal128, precision: int): Decimal128 =
 
-    source line: `948 <../src/decimal128.nim#L948>`__
+    source line: `985 <../src/decimal128.nim#L985>`__
 
     Create a Decimal128 with the supplied precision.
     
@@ -486,7 +522,7 @@ setScale
 
         proc setScale*(value: Decimal128, scale: int): Decimal128 =
 
-    source line: `977 <../src/decimal128.nim#L977>`__
+    source line: `1014 <../src/decimal128.nim#L1014>`__
 
     Create a Decimal128 with the supplied scale.
     
@@ -503,7 +539,7 @@ toFloat
 
         proc toFloat*(value: Decimal128): float =
 
-    source line: `1170 <../src/decimal128.nim#L1170>`__
+    source line: `1223 <../src/decimal128.nim#L1223>`__
 
     Return the floating point equivalent of a decimal.
     
@@ -520,7 +556,7 @@ toInt
 
         proc toInt*(value: Decimal128): int =
 
-    source line: `1147 <../src/decimal128.nim#L1147>`__
+    source line: `1200 <../src/decimal128.nim#L1200>`__
 
     Return the integer part of a decimal as an int.
     
@@ -539,7 +575,7 @@ zero
 
         proc zero*(): Decimal128 =
 
-    source line: `397 <../src/decimal128.nim#L397>`__
+    source line: `406 <../src/decimal128.nim#L406>`__
 
     Create a Decimal128 value of positive zero
 

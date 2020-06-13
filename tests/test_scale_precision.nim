@@ -149,8 +149,8 @@ suite "scale and precision":
     check $newDecimal128(123.0, precision=6, scale=2) == "123.00"
 
     expect ValueError:
-      let x = $newDecimal128(123, precision=4, scale=2)
+      let _ = $newDecimal128(123, precision=4, scale=2)
     expect ValueError:
-      let x = $newDecimal128("123.0000", precision=4, scale=2)
+      let _ = $newDecimal128("123.0000", precision=4, scale=2)
     expect ValueError:
-      let x = $newDecimal128(123.0, precision=4, scale=2)
+      let _ = $newDecimal128(123.0, precision=4, scale=2)

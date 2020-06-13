@@ -48,7 +48,7 @@ EXAMPLES OF USE
     let a = newDecimal128("4003.250")
 
     assert a.getPrecision == 7
-    assert a.getScale = 3
+    assert a.getScale == 3
     assert a.toFloat == 4003.25
     assert a.toInt == 4003
     assert $a == "4003.250"

@@ -32,7 +32,7 @@
 ##     let a = newDecimal128("4003.250")
 ## 
 ##     assert a.getPrecision == 7
-##     assert a.getScale = 3
+##     assert a.getScale == 3
 ##     assert a.toFloat == 4003.25
 ##     assert a.toInt == 4003
 ##     assert $a == "4003.250"
@@ -374,6 +374,15 @@ proc shiftDecimalsLeft(values: array[SIGNIFICAND_SIZE, byte], shiftNeeded: int16
     result[33] = 0.byte
 
 
+proc shiftDecimalsLeftTransient(values: array[TRANSIENT_SIGNIFICAND_SIZE, byte], shiftNeeded: int16): array[TRANSIENT_SIGNIFICAND_SIZE, byte] =
+  for index in 0 ..< TRANSIENT_SIGNIFICAND_SIZE:
+    result[index] = values[index]
+  for _ in 0 ..< shiftNeeded:
+    for index in 0 ..< (TRANSIENT_SIGNIFICAND_SIZE - 1):
+      result[index] = result[index + 1]
+    result[TRANSIENT_SIGNIFICAND_SIZE - 1] = 0.byte
+
+
 proc shiftDecimalsRight(values: array[SIGNIFICAND_SIZE, byte], shiftNeeded: int16): array[SIGNIFICAND_SIZE, byte] =
   for index in 0 ..< SIGNIFICAND_SIZE:
     result[index] = values[index]
@@ -548,6 +557,34 @@ proc getScale*(number: Decimal128): int =
     result = 0
   of dkNaN:
     result = 0
+
+
+proc getScale*(number: Transient128): int =
+  case number.kind:
+  of dkValued:
+    result = -number.exponent
+  of dkInfinite:
+    result = 0
+  of dkNaN:
+    result = 0
+
+
+proc forceScale(number: Transient128, newScale: int): Transient128 =
+  result = number
+  let newExponent = 0 - newScale
+  let currentExponent = number.exponent
+  let diff = (currentExponent - newExponent).int16
+  if diff == 0:
+    return
+  elif diff > 0:
+    result.significand = shiftDecimalsLeftTransient(number.significand, diff)
+    result.exponent -= diff
+    if result.significand == ALLZERO:
+      raise newException(ValueError, "number too large to adjust")
+  elif diff < 0:
+    result.significand = shiftDecimalsRightTransient(number.significand, -diff)
+    result.exponent -= diff
+
 
 proc adjustExponent(number: Decimal128, newExponent: int, forgiveSmall = false): Decimal128 =
   result = number
@@ -1113,6 +1150,22 @@ proc newDecimal128*(value: float, precision: int = NOP, scale: int = NOP): Decim
   result = newDecimal128($value, precision=precision, scale=scale)
 
 
+proc newTransient128(value: Decimal128): Transient128 = 
+  case value.kind:
+  of dkInfinite:
+    result = Transient128(kind: dkInfinite)
+    result.negative = value.negative
+  of dkNaN:
+    result = Transient128(kind: dkNaN)
+    result.signalling = value.signalling
+  of dkValued:
+    result = transientZero()
+    result.negative = value.negative
+    result.exponent = value.exponent
+    for index in 0 ..< SIGNIFICAND_SIZE:
+      result.significand[index + TRANSIENT_OFFSET] = value.significand[index]
+
+
 proc simpleDecStr(dList: array[SIGNIFICAND_SIZE, byte], decimalPlace: int): string =
   let justDigits = dList.intStr
   let scientificExponent = justDigits.len - 1 + decimalPlace
@@ -1251,4 +1304,101 @@ proc `$`*(d: Decimal128): string =
     result = "NaN"
 
 
+# ################################################################
+#
+# MATH OPS
+#
+# ################################################################
+
+
+proc add_transients(left: Transient128, right: Transient128): Transient128 =
+  result = transientZero()
+  #
+  # A. shift the 'scales' to match.
+  #    determine which item has the higher scale and lower it to the other
+  #
+  var scaledLeft: Transient128
+  let startingLeftScale = left.getScale 
+  var scaledRight: Transient128
+  let startingRightScale = right.getScale
+  if startingLeftScale > startingRightScale:
+    scaledLeft = forceScale(left, startingRightScale)
+    scaledRight = right
+    result = forceScale(result, startingRightScale)
+  else:
+    scaledLeft = left
+    scaledRight = forceScale(right, startingLeftScale)
+    result = forceScale(result, startingLeftScale)
+  #
+  # B. from the right, loop through digit columns and add; "carry" when needed
+  #
+  var carry: byte = 0.byte
+  var sum: byte = 0.byte
+  var index = TRANSIENT_SIGNIFICAND_SIZE - 1
+  while index >= 0:
+    let leftDigit = scaledLeft.significand[index]
+    let rightDigit = scaledRight.significand[index]
+    sum = leftDigit + rightDigit + carry
+    carry = sum div 10
+    sum = sum mod 10
+    result.significand[index] = sum
+    index -= 1
+  #
+  # C. Handle "extra carry digit" by shifting the scale and "adding the 1"
+  #
+  if carry > 0.byte:
+    result = forceScale(result, result.getScale + 1)
+    result.significand[0] = carry
+
+
+proc `+`*(left: Decimal128, right: Decimal128): Decimal128 =
+  case left.kind:
+  of dkValued:
+    case right.kind:
+    of dkValued:
+      let trLeft = newTransient128(left)
+      let trRight = newTransient128(right)
+      let answer = add_transients(trLeft, trRight)
+      result = answer.convertTransientToDecimal128()
+    of dkInfinite:
+      result = right
+    of dkNaN:
+      result = right
+  of dkInfinite: # TODO: handle sign manipulation
+    result = left
+  of dkNaN:
+    result = left
+
+
+proc `-`*(left: Decimal128, right: Decimal128): Decimal128 =
+  case left.kind:
+  of dkValued:
+    case right.kind:
+    of dkValued:
+      if left.negative == right.negative:
+        discard # TODO
+      else:
+        if right.negative:
+          # a - (-b) => a + b
+          let trLeft = newTransient128(left)
+          var trRight = newTransient128(right)
+          trRight.negative = not trRight.negative
+          let answer = add_transients(trLeft, trRight)
+          result = answer.convertTransientToDecimal128()
+        else:
+          # (-a) - b => -(a + b)
+          var trLeft = newTransient128(left)
+          trLeft.negative = not trLeft.negative
+          let trRight = newTransient128(right)
+          var answer = add_transients(trLeft, trRight)
+          answer.negative = not answer.negative
+          result = answer.convertTransientToDecimal128()
+    of dkInfinite:
+      result = right
+    of dkNaN:
+      result = right
+  of dkInfinite: # TODO: handle sign manipulation
+    result = left
+  of dkNaN:
+    result = left
 
