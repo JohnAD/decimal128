@@ -270,6 +270,20 @@ proc repr*(d: Decimal128): string =
   result &= " )"
 
 
+proc zeroCorrection(number: var Transient128) =
+  # prevent a -0
+  case number.kind:
+  of dkValued:
+    for digit in number.significand:
+      if digit > 0:
+        return
+    number.negative = false
+  of dkInfinite:
+    discard
+  of dkNaN:
+    discard
+
+
 proc isNegative*(number: Decimal128): bool =
   ## Returns true if the number is negative or is negative infinity; otherwise false.
   case number.kind:
@@ -1310,25 +1324,28 @@ proc `$`*(d: Decimal128): string =
 #
 # ################################################################
 
+proc subtractTransients(left: Transient128, right: Transient128): Transient128 # forward ref
 
-proc add_transients(left: Transient128, right: Transient128): Transient128 =
+
+proc rescaleTransients(left: Transient128, right: Transient128): (Transient128, Transient128, int) =
+  let startingLeftScale = left.getScale 
+  let startingRightScale = right.getScale
+  if startingLeftScale > startingRightScale:
+    let scaledLeft = forceScale(left, startingRightScale)
+    result = (scaledLeft, right, startingRightScale)
+  else:
+    let scaledRight = forceScale(right, startingLeftScale)
+    result = (left, scaledRight, startingLeftScale)
+
+
+proc addTransients(left: Transient128, right: Transient128): Transient128 =
   result = transientZero()
   #
   # A. shift the 'scales' to match.
   #    determine which item has the higher scale and lower it to the other
   #
-  var scaledLeft: Transient128
-  let startingLeftScale = left.getScale 
-  var scaledRight: Transient128
-  let startingRightScale = right.getScale
-  if startingLeftScale > startingRightScale:
-    scaledLeft = forceScale(left, startingRightScale)
-    scaledRight = right
-    result = forceScale(result, startingRightScale)
-  else:
-    scaledLeft = left
-    scaledRight = forceScale(right, startingLeftScale)
-    result = forceScale(result, startingLeftScale)
+  var (scaledLeft, scaledRight, finalScale) = rescaleTransients(left, right)
+  result = forceScale(result, finalScale)
   #
   # B. from the right, loop through digit columns and add; "carry" when needed
   #
@@ -1349,6 +1366,8 @@ proc add_transients(left: Transient128, right: Transient128): Transient128 =
   if carry > 0.byte:
     result = forceScale(result, result.getScale + 1)
     result.significand[0] = carry
+  #
+  zeroCorrection(result)
 
 
 proc `+`*(left: Decimal128, right: Decimal128): Decimal128 =
@@ -1356,10 +1375,26 @@ proc `+`*(left: Decimal128, right: Decimal128): Decimal128 =
   of dkValued:
     case right.kind:
     of dkValued:
-      let trLeft = newTransient128(left)
-      let trRight = newTransient128(right)
-      let answer = add_transients(trLeft, trRight)
-      result = answer.convertTransientToDecimal128()
+      if left.negative == right.negative:
+        let trLeft = newTransient128(left)
+        let trRight = newTransient128(right)
+        let answer = addTransients(trLeft, trRight)
+        result = answer.convertTransientToDecimal128()
+      else:
+        if left.negative:
+          # turn "(-a) + b" into "b - a"
+          let trLeft = newTransient128(right)
+          var trRight = newTransient128(left)
+          trRight.negative = not trRight.negative
+          let answer = subtractTransients(trLeft, trRight)
+          result = answer.convertTransientToDecimal128()
+        else:
+          # turn "a + (-b)" into "a - b"
+          let trLeft = newTransient128(left)
+          var trRight = newTransient128(right)
+          trRight.negative = not trRight.negative
+          let answer = subtractTransients(trLeft, trRight)
+          result = answer.convertTransientToDecimal128()
     of dkInfinite:
       result = right
     of dkNaN:
@@ -1370,27 +1405,93 @@ proc `+`*(left: Decimal128, right: Decimal128): Decimal128 =
     result = left
 
 
+proc digitLength(value: Transient128): int = 
+  result = 0
+  for index in 0 ..< TRANSIENT_SIGNIFICAND_SIZE:
+    if value.significand[index] > 0:
+      result = TRANSIENT_SIGNIFICAND_SIZE - index
+      break
+
+
+proc isLeftSmaller(left: Transient128, right: Transient128): bool =
+  # note: this routine assumes the scale of left/right are identical
+  result = false
+  for index in 0 ..< TRANSIENT_SIGNIFICAND_SIZE:
+    if left.significand[index] < right.significand[index]:
+      result = true
+      break
+    elif left.significand[index] > right.significand[index]:
+      break
+
+  
+proc subtractTransients(left: Transient128, right: Transient128): Transient128 =
+  #
+  # note: ONLY call subtractTransients with two positives or two negatives.
+  #       Anything else is actually an addition.
+  #
+  result = transientZero()
+  #
+  # A. shift the 'scales' to match.
+  #    determine which item has the higher scale and lower it to the other
+  #
+  var (scaledLeft, scaledRight, finalScale) = rescaleTransients(left, right)
+  result = forceScale(result, finalScale)
+  result.negative = left.negative
+  #
+  # B. reverse the numbers if the smaller number is first (and reverse the answer's sign)
+  #
+  if isLeftSmaller(scaledLeft, scaledRight):
+    (scaledLeft, scaledRight) = (scaledRight, scaledLeft)
+    result.negative = not left.negative
+  else:
+    result.negative = left.negative
+  #
+  # C. From right to left, subtract each pair of digits. Borrow from the next
+  #    digit if needed.
+  #
+  var borrow: byte = 0.byte
+  var sum: byte = 0.byte
+  var index = TRANSIENT_SIGNIFICAND_SIZE - 1
+  while index >= 0:
+    let leftDigit = scaledLeft.significand[index] - borrow
+    let rightDigit = scaledRight.significand[index]
+    if leftDigit < rightDigit:
+      # borrow
+      sum = 10 + leftDigit - rightDigit
+      borrow = 1.byte
+    else:
+      sum = leftDigit - rightDigit
+      borrow = 0.byte
+    result.significand[index] = sum
+    index -= 1
+  #
+  zeroCorrection(result)
+
+
 proc `-`*(left: Decimal128, right: Decimal128): Decimal128 =
   case left.kind:
   of dkValued:
     case right.kind:
     of dkValued:
       if left.negative == right.negative:
-        discard # TODO
+        let trLeft = newTransient128(left)
+        let trRight = newTransient128(right)
+        let answer = subtractTransients(trLeft, trRight)
+        result = answer.convertTransientToDecimal128()
       else:
         if right.negative:
           # a - (-b) => a + b
           let trLeft = newTransient128(left)
           var trRight = newTransient128(right)
           trRight.negative = not trRight.negative
-          let answer = add_transients(trLeft, trRight)
+          let answer = addTransients(trLeft, trRight)
           result = answer.convertTransientToDecimal128()
         else:
           # (-a) - b => -(a + b)
           var trLeft = newTransient128(left)
           trLeft.negative = not trLeft.negative
           let trRight = newTransient128(right)
-          var answer = add_transients(trLeft, trRight)
+          var answer = addTransients(trLeft, trRight)
           answer.negative = not answer.negative
           result = answer.convertTransientToDecimal128()
     of dkInfinite:

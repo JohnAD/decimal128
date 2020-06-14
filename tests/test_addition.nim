@@ -49,9 +49,41 @@ suite "addition and subtraction":
     check ( newDecimal128(   "-1.8") - newDecimal128(    "3.3") ) === newDecimal128(   "-5.1")
     check ( newDecimal128(   "-9"  ) - newDecimal128(    "3"  ) ) === newDecimal128(    "-12")
 
-  # test "basic subtraction":
-  #   check ( newDecimal128(    "3.0") - newDecimal128(    "3.0") ) === newDecimal128(    "0.0")
-  #   check ( newDecimal128(    "3.1") - newDecimal128(    "3.0") ) === newDecimal128(    "0.1")
-  #   check ( newDecimal128(    "3.8") - newDecimal128(    "3.2") ) === newDecimal128(    "0.6")
-  #   check ( newDecimal128(    "3.8") - newDecimal128(    "3.3") ) === newDecimal128(    "0.5")
-  #   check ( newDecimal128(    "9"  ) - newDecimal128(    "3"  ) ) === newDecimal128(      "6")
+  test "basic subtraction":
+    check ( newDecimal128(    "3.0") - newDecimal128(    "3.0") ) === newDecimal128(    "0.0")
+    check ( newDecimal128(    "3.1") - newDecimal128(    "3.0") ) === newDecimal128(    "0.1")
+    check ( newDecimal128(    "3.8") - newDecimal128(    "3.2") ) === newDecimal128(    "0.6")
+    check ( newDecimal128(    "3.8") - newDecimal128(    "3.3") ) === newDecimal128(    "0.5")
+    check ( newDecimal128(    "9"  ) - newDecimal128(    "3"  ) ) === newDecimal128(      "6")
+    #
+    check ( newDecimal128(   "-3.0") - newDecimal128(   "-3.0") ) === newDecimal128(    "0.0")
+    check ( newDecimal128(   "-3.1") - newDecimal128(   "-3.0") ) === newDecimal128(   "-0.1")
+    check ( newDecimal128(   "-3.8") - newDecimal128(   "-3.2") ) === newDecimal128(   "-0.6")
+    check ( newDecimal128(   "-3.8") - newDecimal128(   "-3.3") ) === newDecimal128(   "-0.5")
+    check ( newDecimal128(   "-9"  ) - newDecimal128(   "-3"  ) ) === newDecimal128(     "-6")
+
+  test "subtraction from adding a negative":
+    check ( newDecimal128(    "3.0") + newDecimal128(   "-3.0") ) === newDecimal128(    "0.0")
+    check ( newDecimal128(    "3.1") + newDecimal128(   "-3.0") ) === newDecimal128(    "0.1")
+    check ( newDecimal128(    "3.8") + newDecimal128(   "-3.2") ) === newDecimal128(    "0.6")
+    check ( newDecimal128(    "3.8") + newDecimal128(   "-3.3") ) === newDecimal128(    "0.5")
+    check ( newDecimal128(    "9"  ) + newDecimal128(   "-3"  ) ) === newDecimal128(      "6")
+    #
+    check ( newDecimal128(    "3.0") + newDecimal128(   "-3.0") ) === newDecimal128(    "0.0")
+    check ( newDecimal128(    "3.1") + newDecimal128(   "-3.0") ) === newDecimal128(    "0.1")
+    check ( newDecimal128(    "3.8") + newDecimal128(   "-3.2") ) === newDecimal128(    "0.6")
+    check ( newDecimal128(    "3.8") + newDecimal128(   "-3.3") ) === newDecimal128(    "0.5")
+    check ( newDecimal128(    "9"  ) + newDecimal128(   "-3"  ) ) === newDecimal128(      "6")
+
+  test "subtract past zero":
+    check ( newDecimal128(    "3.0") - newDecimal128(    "5.0") ) === newDecimal128(   "-2.0")
+    check ( newDecimal128(    "3.1") - newDecimal128(    "5.0") ) === newDecimal128(   "-1.9")
+    check ( newDecimal128(    "3.8") - newDecimal128(    "5.2") ) === newDecimal128(   "-1.4")
+    check ( newDecimal128(    "3.8") - newDecimal128(    "5.3") ) === newDecimal128(   "-1.5")
+    check ( newDecimal128(    "9"  ) - newDecimal128(   "15"  ) ) === newDecimal128(     "-6")
+    #
+    check ( newDecimal128(    "3.0") + newDecimal128(   "-5.0") ) === newDecimal128(   "-2.0")
+    check ( newDecimal128(    "3.1") + newDecimal128(   "-5.0") ) === newDecimal128(   "-1.9")
+    check ( newDecimal128(    "3.8") + newDecimal128(   "-5.2") ) === newDecimal128(   "-1.4")
+    check ( newDecimal128(    "3.8") + newDecimal128(   "-5.3") ) === newDecimal128(   "-1.5")
+    check ( newDecimal128(    "9"  ) + newDecimal128(   "-15" ) ) === newDecimal128(     "-6")
