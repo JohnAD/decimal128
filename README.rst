@@ -1,6 +1,6 @@
 Introduction to decimal128
 ==============================================================================
-ver 0.1.1
+ver 0.1.2
 
 .. image:: https://raw.githubusercontent.com/yglukhov/nimble-tag/master/nimble.png
    :height: 34
@@ -64,6 +64,7 @@ EXAMPLES OF USE
     assert b.getScale = 36
     assert b.toFloat == 0.001234
 
+    assert $(newDecimal128("423.77") + newDecimal128("20.9362")) == "444.71"
 
 
 

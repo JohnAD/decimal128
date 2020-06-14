@@ -48,6 +48,7 @@
 ##     assert b.getScale = 36
 ##     assert b.toFloat == 0.001234
 ##
+##     assert $(newDecimal128("423.77") + newDecimal128("20.9362")) == "444.71"
 
 import strutils except strip
 import unicode
@@ -462,6 +463,51 @@ proc digitCount(significand: array[TRANSIENT_SIGNIFICAND_SIZE, byte]): int =
       result += 1
 
 
+proc shouldRoundUpWhenBankersRoundingToEven(values: array[TRANSIENT_SIGNIFICAND_SIZE, byte], keyDigitIndex: int): bool =
+  let keyDigit = values[keyDigitIndex]
+  var lastDigit = 0.byte
+  if keyDigitIndex > 0:
+    lastDigit = values[keyDigitIndex - 1]
+  #
+  var AllZeroesFollowingKeyDigit: bool = true
+  if keyDigitIndex < (TRANSIENT_SIGNIFICAND_SIZE - 1):
+    for index in (keyDigitIndex + 1) ..< TRANSIENT_SIGNIFICAND_SIZE:
+      if values[index] > 0.byte:
+        AllZeroesFollowingKeyDigit = false
+  #  
+  if keyDigit < 5:         # ...123[4]12 becomes ...123
+    result = false
+  elif keyDigit > 5:       # ...123[6]12 becomes ...124
+    result = true
+  elif (keyDigit == 5) and (AllZeroesFollowingKeyDigit == false):  # ...123[5]12 becomes ...124
+    result = true
+  else:    # keydigit == 5 and all zeroes followed the 5
+    # let evenFlag = ((values[keyDigitIndex - 1] mod 2.byte) == 0.byte)  # is the last digit (before the key digit) even?
+    let evenFlag = ((lastDigit mod 2.byte) == 0.byte)  # is the last digit (before the key digit) even?    
+    if evenFlag:
+      result = false      # ...123[5]00 becomes ...124
+    else:
+      result = true       # ...122[5]00 becomes ...122
+
+
+proc trimBankersRoundingToEven(values: var array[TRANSIENT_SIGNIFICAND_SIZE, byte], trimCount: int) =
+  # forced rounding
+  let keyDigitIndex = TRANSIENT_SIGNIFICAND_SIZE - trimCount
+  let roundUp = shouldRoundUpWhenBankersRoundingToEven(values, keyDigitIndex)
+  #
+  values = shiftDecimalsRightTransient(values, trimCount.int16)
+  #
+  if roundUp:
+    var index = TRANSIENT_SIGNIFICAND_SIZE - 1 # start with last digit
+    for counter in 0 ..< TRANSIENT_SIGNIFICAND_SIZE:
+      values[index] += 1.byte
+      if values[index] < 10:
+        break  # done
+      else:
+        values[index] = 0 # if it rounds up to "11", then set to zero and
+        index -= 1        # increment the previous digit
+
+
 proc bankersRoundingToEven(values: array[TRANSIENT_SIGNIFICAND_SIZE, byte]): (array[SIGNIFICAND_SIZE, byte], int) =
   # used to round from the transient (interim) result to a final result with rounding
   var sig: array[SIGNIFICAND_SIZE, byte]
@@ -478,28 +524,7 @@ proc bankersRoundingToEven(values: array[TRANSIENT_SIGNIFICAND_SIZE, byte]): (ar
     #
     var trimCount = size - SIGNIFICAND_SIZE
     let keyDigitIndex = TRANSIENT_SIGNIFICAND_SIZE - trimCount
-    var AllZeroesFollowingKeyDigit: bool = true
-    if trimCount > 1:
-      for index in (keyDigitIndex + 1) ..< TRANSIENT_SIGNIFICAND_SIZE:
-        if values[index] > 0.byte:
-          AllZeroesFollowingKeyDigit = false
-    let keyDigit = values[keyDigitIndex]
-    #
-    # make a rounding decision
-    #
-    var roundUp: bool
-    if keyDigit < 5:         # ...123[4]12 becomes ...123
-      roundUp = false
-    elif keyDigit > 5:       # ...123[6]12 becomes ...124
-      roundUp = true
-    elif (keyDigit == 5) and (AllZeroesFollowingKeyDigit == false):  # ...123[5]12 becomes ...124
-      roundUp = true
-    else:    # keydigit == 5 and all zeroes followed the 5
-      let evenFlag = ((values[keyDigitIndex - 1] mod 2.byte) == 0.byte)  # is the last digit (before the key digit) even?
-      if evenFlag:
-        roundUp = false      # ...123[5]00 becomes ...124
-      else:
-        roundUp = true       # ...122[5]00 becomes ...122
+    let roundUp = shouldRoundUpWhenBankersRoundingToEven(values, keyDigitIndex)
     #
     # get result truncated (and detect problematic all-nines scenario)
     #
@@ -596,7 +621,8 @@ proc forceScale(number: Transient128, newScale: int): Transient128 =
     if result.significand == ALLZERO:
       raise newException(ValueError, "number too large to adjust")
   elif diff < 0:
-    result.significand = shiftDecimalsRightTransient(number.significand, -diff)
+    trimBankersRoundingToEven(result.significand, -diff)
+    # result.significand = shiftDecimalsRightTransient(number.significand, -diff)
     result.exponent -= diff
 
 
@@ -785,7 +811,6 @@ proc encodeDecimal128*(value: Decimal128, encoding: CoefficientEncoding): string
       result = "78000000000000000000000000000000".parseHexStr
   of dkNaN:
     result = "7c000000000000000000000000000000".parseHexStr
-
 
 
 proc parseFromString(str: string): Transient128 =
@@ -1324,28 +1349,28 @@ proc `$`*(d: Decimal128): string =
 #
 # ################################################################
 
+
 proc subtractTransients(left: Transient128, right: Transient128): Transient128 # forward ref
 
 
-proc rescaleTransients(left: Transient128, right: Transient128): (Transient128, Transient128, int) =
+proc rescaleTransients(left: Transient128, right: Transient128): (Transient128, Transient128, int, int) =
   let startingLeftScale = left.getScale 
   let startingRightScale = right.getScale
-  if startingLeftScale > startingRightScale:
+  if startingLeftScale < startingRightScale:
     let scaledLeft = forceScale(left, startingRightScale)
-    result = (scaledLeft, right, startingRightScale)
+    result = (scaledLeft, right, startingRightScale, startingLeftScale)
   else:
     let scaledRight = forceScale(right, startingLeftScale)
-    result = (left, scaledRight, startingLeftScale)
+    result = (left, scaledRight, startingLeftScale, startingRightScale)
 
 
 proc addTransients(left: Transient128, right: Transient128): Transient128 =
   result = transientZero()
   #
   # A. shift the 'scales' to match.
-  #    determine which item has the higher scale and lower it to the other
   #
-  var (scaledLeft, scaledRight, finalScale) = rescaleTransients(left, right)
-  result = forceScale(result, finalScale)
+  var (scaledLeft, scaledRight, transientScale, finalScale) = rescaleTransients(left, right)
+  result = forceScale(result, transientScale)
   #
   # B. from the right, loop through digit columns and add; "carry" when needed
   #
@@ -1364,13 +1389,31 @@ proc addTransients(left: Transient128, right: Transient128): Transient128 =
   # C. Handle "extra carry digit" by shifting the scale and "adding the 1"
   #
   if carry > 0.byte:
-    result = forceScale(result, result.getScale + 1)
-    result.significand[0] = carry
+    result.significand[index] = carry
   #
+  result = forceScale(result, finalScale)
   zeroCorrection(result)
 
 
 proc `+`*(left: Decimal128, right: Decimal128): Decimal128 =
+  ## Adds the left and right numbers together.
+  ##
+  ## While it is possible to explicity call this function like this:
+  ##
+  ## .. code:: nim
+  ##
+  ##     let a = newDecimal(12)
+  ##     let b = newDecimal(23)
+  ##     let answer = `+`(a, b)
+  ##
+  ## Nim allows for the better and more intuitive:
+  ##  
+  ## .. code:: nim
+  ##
+  ##     let a = newDecimal(12)
+  ##     let b = newDecimal(23)
+  ##     let answer = a + b
+  ##
   case left.kind:
   of dkValued:
     case right.kind:
@@ -1405,14 +1448,6 @@ proc `+`*(left: Decimal128, right: Decimal128): Decimal128 =
     result = left
 
 
-proc digitLength(value: Transient128): int = 
-  result = 0
-  for index in 0 ..< TRANSIENT_SIGNIFICAND_SIZE:
-    if value.significand[index] > 0:
-      result = TRANSIENT_SIGNIFICAND_SIZE - index
-      break
-
-
 proc isLeftSmaller(left: Transient128, right: Transient128): bool =
   # note: this routine assumes the scale of left/right are identical
   result = false
@@ -1432,10 +1467,9 @@ proc subtractTransients(left: Transient128, right: Transient128): Transient128 =
   result = transientZero()
   #
   # A. shift the 'scales' to match.
-  #    determine which item has the higher scale and lower it to the other
   #
-  var (scaledLeft, scaledRight, finalScale) = rescaleTransients(left, right)
-  result = forceScale(result, finalScale)
+  var (scaledLeft, scaledRight, transientScale, finalScale) = rescaleTransients(left, right)
+  result = forceScale(result, transientScale)
   result.negative = left.negative
   #
   # B. reverse the numbers if the smaller number is first (and reverse the answer's sign)
@@ -1465,10 +1499,29 @@ proc subtractTransients(left: Transient128, right: Transient128): Transient128 =
     result.significand[index] = sum
     index -= 1
   #
+  result = forceScale(result, finalScale)
   zeroCorrection(result)
 
 
 proc `-`*(left: Decimal128, right: Decimal128): Decimal128 =
+  ## Subtract the right number from the left number.
+  ##
+  ## While it is possible to explicity call this function like this:
+  ##
+  ## .. code:: nim
+  ##
+  ##     let a = newDecimal(12)
+  ##     let b = newDecimal(23)
+  ##     let answer = `-`(a, b)
+  ##
+  ## Nim allows for the better and more intuitive:
+  ##  
+  ## .. code:: nim
+  ##
+  ##     let a = newDecimal(12)
+  ##     let b = newDecimal(23)
+  ##     let answer = a - b
+  ##
   case left.kind:
   of dkValued:
     case right.kind:

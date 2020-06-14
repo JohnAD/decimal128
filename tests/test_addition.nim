@@ -10,6 +10,7 @@ suite "addition and subtraction":
     check ( newDecimal128(    "1.8") + newDecimal128(    "3.2") ) === newDecimal128(    "5.0")
     check ( newDecimal128(    "1.8") + newDecimal128(    "3.3") ) === newDecimal128(    "5.1")
     check ( newDecimal128(    "9"  ) + newDecimal128(    "3"  ) ) === newDecimal128(     "12")
+    check ( newDecimal128(   "99"  ) + newDecimal128(   "99"  ) ) === newDecimal128(    "198")
     #
     check ( newDecimal128( "123456789012345678901234567890123") + newDecimal128("1") ) === newDecimal128( "123456789012345678901234567890124")
     check ( newDecimal128(  "99999999999999999999999999999999") + newDecimal128("1") ) === newDecimal128( "100000000000000000000000000000000")
@@ -35,6 +36,15 @@ suite "addition and subtraction":
       newDecimal128("9999999999999999999999999999999999") +
       newDecimal128("9999999999999999999999999999999999") 
     ) === newDecimal128("2.000000000000000000000000000000000E+34")
+
+  test "addition maintaining proper scale":
+    check ( newDecimal128(    "1.00"  ) + newDecimal128(    "1.003" ) ) === newDecimal128(    "2.00"  )
+    check ( newDecimal128(    "2.00"  ) + newDecimal128(    "1.003" ) ) === newDecimal128(    "3.00"  )
+    check ( newDecimal128(    "2.000" ) + newDecimal128(    "1.003" ) ) === newDecimal128(    "3.003" )
+    check ( newDecimal128(    "2.00"  ) + newDecimal128(    "1.006" ) ) === newDecimal128(    "3.01"  )
+    echo "ANSWER:" & $( newDecimal128(     2, scale=2      ) + newDecimal128(    "1.006" ))
+    check ( newDecimal128(     2      ) + newDecimal128(    "1.006" ) ) === newDecimal128(    "3"     )
+    check ( newDecimal128( 2, scale=3 ) + newDecimal128(    "1.006" ) ) === newDecimal128(    "3.006" )
 
   test "addition from double-negative":
     check ( newDecimal128(    "1.0") - newDecimal128(   "-3.0") ) === newDecimal128(    "4.0")
@@ -86,4 +96,4 @@ suite "addition and subtraction":
     check ( newDecimal128(    "3.1") + newDecimal128(   "-5.0") ) === newDecimal128(   "-1.9")
     check ( newDecimal128(    "3.8") + newDecimal128(   "-5.2") ) === newDecimal128(   "-1.4")
     check ( newDecimal128(    "3.8") + newDecimal128(   "-5.3") ) === newDecimal128(   "-1.5")
-    check ( newDecimal128(    "9"  ) + newDecimal128(   "-15" ) ) === newDecimal128(     "-6")
+    check ( newDecimal128(    "9"  ) + newDecimal128(  "-15"  ) ) === newDecimal128(     "-6")

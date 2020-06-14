@@ -1,6 +1,6 @@
 Introduction to decimal128
 ==============================================================================
-ver 0.1.1
+ver 0.1.2
 
 This library creates a data type called ``Decimal128`` that allows one to
 store and manipulate decimal numbers.
@@ -52,6 +52,7 @@ EXAMPLES OF USE
     assert b.getScale = 36
     assert b.toFloat == 0.001234
 
+    assert $(newDecimal128("423.77") + newDecimal128("20.9362")) == "444.71"
 
 
 
