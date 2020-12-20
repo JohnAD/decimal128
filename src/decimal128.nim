@@ -17,8 +17,9 @@
 ## A more informal copy of that spec can be seen at 
 ## http://speleotrove.com/decimal/decbits.html , though that spec only shows
 ## the Densely Packed Binary (DPD) version of storing the coefficient. This library
-## supports both DPD and the unsigned binary integer storage (BID) method when
-## for serializing and unserializing from binary images.
+## supports the unsigned binary integer storage (BID) method when
+## for serializing and unserializing from binary images. The DPD method is still
+## a work-in-progress.
 ##
 ## The BID method is used by BSON and MongoDB.
 ##
@@ -312,6 +313,20 @@ proc isReal*(number: Decimal128): bool =
   case number.kind:
   of dkValued:  
     result = true
+  of dkInfinite:
+    result = false
+  of dkNaN:
+    result = false
+
+
+proc isZero*(number: Decimal128): bool =
+  ## Returns true if the number as a value and the value is zero.
+  case number.kind:
+  of dkValued:
+    if number.significand == ALLZERO:
+      result = true
+    else:
+      result = false
   of dkInfinite:
     result = false
   of dkNaN:
@@ -668,10 +683,10 @@ proc decodeDecimal128*(data: string, encoding: CoefficientEncoding): Decimal128 
   ##
   ## 1. ``ceDPD`` -- Densely Packed Decimal. This matches method 1 of storing the coefficient (significand).
   ##     Essentially, each three digits is stored as a 10-bit declet as described in
-  ##     https://en.wikipedia.org/wiki/Densely_packed_decimal
+  ##     https://en.wikipedia.org/wiki/Densely_packed_decimal . **This encoding method does not currently work!**.
   ## 2. ``ceBID`` -- Binary Integer Decimal. This matches method 2 of storing the coeffecient.
   ##     Essentially, the number is stored as a simple unsigned integer into the last
-  ##     133 bits of the 128-bit pattern. See the IEEE 754 2008 spec for details.
+  ##     113 bits of the 128-bit pattern. See the IEEE 754 2008 spec for details.
   var bs: array[16, byte]
   if data.len == 32:
     let bsStr = parseHexStr(data)
@@ -1206,6 +1221,7 @@ proc newTransient128(value: Decimal128): Transient128 =
 
 
 proc simpleDecStr(dList: array[SIGNIFICAND_SIZE, byte], decimalPlace: int): string =
+  # convert the array into a simple string of digits
   let justDigits = dList.intStr
   let scientificExponent = justDigits.len - 1 + decimalPlace
   if (scientificExponent < -6) or (decimalPlace > 0):
@@ -1556,3 +1572,130 @@ proc `-`*(left: Decimal128, right: Decimal128): Decimal128 =
   of dkNaN:
     result = left
 
+
+proc productPositive(left: Decimal128, right: Decimal128): bool =
+  if left.isPositive():
+    if right.isPositive():
+      result = true
+    else:
+      result = false
+  else:
+    if right.isPositive():
+      result = false
+    else:
+      result = true
+
+
+proc productInfinity(left: Decimal128, right: Decimal128): Decimal128 =
+  if left.isZero() or left.isNaN() or right.isZero() or right.isNaN():
+    result = Decimal128(kind: dkNaN)
+  else:
+    if productPositive(left, right):
+      result = Decimal128(kind: dkInfinite, negative: false)
+    else:
+      result = Decimal128(kind: dkInfinite, negative: true)
+
+
+proc rescaleTransientsRight(a: Transient128, b: Transient128): (Transient128, Transient128, int, int) =
+  # shifts the significant digits to the right to remove all zeroes. This makes it easier to multiply.
+  # returns the new right/left values plus the digits moved to the left/right
+  #
+  var
+    aShift = 0
+    bShift = 0
+    newA = a
+    newB = b
+
+  # TODO: do stuff here later, for now leave it all alone
+
+  result = (newA, newB, aShift, bShift)
+
+
+proc multiplyTransients(multiplier: Transient128, multiplicand: Transient128): Transient128 =
+  # does the actual multiplication
+  # this routine assumes both numbers are already in "valued" state
+  # by definition, transient128 should be large enough to avoid overflow
+  #
+  # 1. do traditional long-hand multiplacation of the digits to get columns
+  #
+  #    we are using uint16 for the columns because the largest column total would be 603 = ((34 * 9) + 297)
+  #
+  var columns: array[TRANSIENT_SIGNIFICAND_SIZE, uint16] = [0.uint16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  let diff = TRANSIENT_SIGNIFICAND_SIZE - 1
+  var columnOffset = 0
+  for multiplicandColumn in 0 ..< SIGNIFICAND_SIZE:
+    for multiplierColumn in 0 ..< SIGNIFICAND_SIZE:
+      let columnOffset = multiplicandColumn + multiplierColumn
+      let cIndex = diff - columnOffset
+      let mcIndex = diff - multiplicandColumn
+      let mpIndex = diff - multiplierColumn
+      columns[cIndex] += (multiplier.significand[mpIndex].uint16 * multiplicand.significand[mcIndex].uint16)
+  # echo "multiplier:   ", $multiplier.significand
+  # echo "multiplicand: ", $multiplicand.significand
+  # echo "columns:      ", $columns
+  #
+  # 2. handle carried numbers
+  #
+  var carry = 0.uint16
+  for columnOffset in 0 ..< TRANSIENT_SIGNIFICAND_SIZE:
+    let cIndex = diff - columnOffset
+    columns[cIndex] += carry
+    if columns[cIndex] > 9:
+      let remainder = columns[cIndex] mod 10
+      carry = columns[cIndex] div 10
+      columns[cIndex] = remainder
+    else:
+      carry = 0
+  # echo "carried:      ", $columns
+  #
+  # 3. create answer
+  #
+  let exp = multiplicand.exponent + multiplier.exponent
+  result = Transient128(kind: dkValued, significand: TALLZERO, exponent: exp)
+  for index in 0 ..< TRANSIENT_SIGNIFICAND_SIZE:
+    result.significand[index] = columns[index].byte
+  #
+  # 4. adjust for significance
+  #
+  #  TODO
+
+
+proc `*`*(left: Decimal128, right: Decimal128): Decimal128 =
+  ## Multiply the left and right numbers and return the product.
+  ##
+  ## While it is possible to explicity call this function like this:
+  ##
+  ## .. code:: nim
+  ##
+  ##     let a = newDecimal("12")
+  ##     let b = newDecimal("23")
+  ##     let answer = `*`(a, b)
+  ##
+  ## Nim allows for the better and more intuitive:
+  ##  
+  ## .. code:: nim
+  ##
+  ##     let a = newDecimal("12")
+  ##     let b = newDecimal("23")
+  ##     let answer = a * b
+  ##
+  ## If either number is (+/-) Infinite, the result is Infinite, but the signs are taken into account.
+  ## When a Infinite number is multiplied by zero, the result is NAN.
+  ## If either number is NAN, the result is NAN. Always.
+  case left.kind:
+  of dkValued:
+    case right.kind:
+    of dkValued:
+      let trLeft = newTransient128(left)
+      let trRight = newTransient128(right)
+      let answer = multiplyTransients(trLeft, trRight)
+      result = answer.convertTransientToDecimal128()
+      echo $result
+    of dkInfinite:
+      result = productInfinity(left, right)
+    of dkNaN:
+      result = right
+  of dkInfinite:
+    result = productInfinity(left, right)
+  of dkNaN:
+    result = left

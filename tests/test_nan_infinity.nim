@@ -14,6 +14,8 @@ suite "using non-number decimals":
     check testNaN !== newDecimal128("123")
     check testNaN !== newDecimal128("Infinity")
 
+    check testNaN === newDecimal128("Infinity") * newDecimal128("0")
+
   test "Infinity":
 
     let testPosInf = newDecimal128("Infinity")
