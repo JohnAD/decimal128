@@ -50,7 +50,37 @@
 ##     assert b.toFloat == 0.001234
 ##
 ##     assert $(newDecimal128("423.77") + newDecimal128("20.9362")) == "444.71"
-
+##
+## FINANCIAL LIBRARY NOTES
+## -----------------------
+##
+## This library is very strict when it comes to numeric significance. It does 
+## NOT provide an intuitive answer sometimes if you are not taking that into 
+## consideration.
+##
+## For example, to calculate a simple interest on $34234.23 at a rate of 8.3%, the
+## following program will not provide you what you want:
+##
+## 
+## This because 34234.23 has 7 significant digits and 0.083 has 3 significant
+## digits. So, mathematically, the answer cannot have more than three significant
+## digits.
+##
+## Another way to think of it: the rate is not precise enough.
+##
+## So, set to your interest rate to 0.0830000, or perhaps set it with max precision:
+##
+## .. code:: nim
+##
+##    newDecimal128("0.083", precision=34) # 34 is max precision
+##
+## If later, you want the result with two decimal places, set the "scale":
+##
+## .. code:: nim
+##
+##    var payment = (amt * rate).setScale(2)
+##
+## TODO: stop using word "precision" and switch to "significance"; add newExactDecimal()
 import strutils except strip
 import unicode
 import decimal128/uint113
@@ -593,6 +623,23 @@ proc getPrecision*(number: Decimal128): int =
     result = 0
 
 
+proc getPrecision(number: Transient128): int =
+  # Get number of digits of precision (significance) of the decimal number.
+  #
+  case number.kind:
+  of dkValued:
+    result = digitCount(number.significand)
+    if result == 0:  # only a true zero value can generate this
+      if number.exponent < 0:
+        result = -number.exponent
+      else:
+        result = 1
+  of dkInfinite:
+    result = 0
+  of dkNaN:
+    result = 0
+
+
 proc getScale*(number: Decimal128): int =
   ## Get number of digits of the fractional part of the number. Or to put it differently:
   ## get the number of decimals after the decimal point.
@@ -1070,11 +1117,11 @@ proc setScale*(value: Decimal128, scale: int): Decimal128 =
   ##
   ## The scale must be a value from −6143 to +6144
   ##  
-  ## When NaN or Infinity is passed, the value is return as-is.
+  ## When NaN or Infinity is passed, the value is returned as-is.
   result = value
   case value.kind:
   of dkValued:
-    let negLimit = 0 - 6143  # honestly, I don't know why this is needed.
+    let negLimit = 0 - 6143  # honestly, I don't know why this must be pre-calculated
     if scale < negLimit:
       raise newException(ValueError, "scale cannot be less than -6143. $1 was tried.".format(scale))
     if scale > 6144:
@@ -1259,17 +1306,17 @@ proc toInt*(value: Decimal128): int =
   ## 1 not 2.
   ##
   ## If the integer part will not fit into a Nim integer, then
-  ## an OverflowError error is raised.
+  ## an OverflowDefect error is raised.
   case value.kind:
   of dkInfinite:
-    raise newException(OverflowError, "Decimal infinity will not fit into an integer.")
+    raise newException(OverflowDefect, "Decimal infinity will not fit into an integer.")
   of dkNaN:
     raise newException(ValueError, "Decimal NaN cannot be stored into an integer.")
   of dkValued:
     let temp = value.adjustExponent(0, forgiveSmall=true)
     let bigInt = new_uint113(temp.significand)
     if bigInt.left != 0:
-      raise newException(OverflowError, "Decimal is too large to fit into an integer.")
+      raise newException(OverflowDefect, "Decimal is too large to fit into an integer.")
     result = bigInt.right.int
     if value.negative:
       result = -result
@@ -1290,7 +1337,7 @@ proc toFloat*(value: Decimal128): float =
   # a direct and purposeful conversion could handle more border cases.
   case value.kind:
   of dkInfinite:
-    raise newException(OverflowError, "Decimal infinity will not fit into a float.")
+    raise newException(OverflowDefect, "Decimal infinity will not fit into a float.")
   of dkNaN:
     raise newException(ValueError, "Decimal NaN cannot be stored into a float.")
   of dkValued:
@@ -1611,10 +1658,52 @@ proc rescaleTransientsRight(a: Transient128, b: Transient128): (Transient128, Tr
   result = (newA, newB, aShift, bShift)
 
 
-proc multiplyTransients(multiplier: Transient128, multiplicand: Transient128): Transient128 =
+
+proc applyLowerPrecision(a: Transient128, b: Transient128, answer: Decimal128): Decimal128 =
+  #
+  # all numbers are "infinitely" precise to the left as true integers.
+  # a true integer has a scale of zero
+  #
+  # Examples using 9900:
+  #
+  #    9900 * 10     = 99000
+  #    9900 * 10.0   = 99000
+  #    99E2 * 10     = 99E3
+  #   990E1 * 10     = 990E2
+  #    9900 * 1E1    = 1E4
+  #
+  let aPrec = a.getPrecision()
+  let bPrec = b.getPrecision()
+  let answerPrec = answer.getPrecision()
+  echo "a: ", aPrec, " b: ", bPrec, " ans: ", answerPrec
+  if a.getScale() == 0:
+    if b.getScale() == 0:
+      # echo "both infinite"
+      result = answer
+    else:
+      # echo "a infinite"
+      if aPrec > bPrec:
+        result = answer.setPrecision(aPrec)
+      else:
+        result = answer.setPrecision(bPrec)
+  else:
+    if b.getScale() == 0:
+      # echo "b infinite"
+      if bPrec > aPrec:
+        result = answer.setPrecision(bPrec)
+      else:
+        result = answer.setPrecision(aPrec)
+    else:
+      if aPrec < bPrec:
+        result = answer.setPrecision(aPrec)
+      else:
+        result = answer.setPrecision(bPrec)
+
+
+proc multiplyTransients(multiplier: Transient128, multiplicand: Transient128): Decimal128 =
   # does the actual multiplication
   # this routine assumes both numbers are already in "valued" state
-  # by definition, transient128 should be large enough to avoid overflow
+  #
   #
   # 1. do traditional long-hand multiplacation of the digits to get columns
   #
@@ -1634,8 +1723,16 @@ proc multiplyTransients(multiplier: Transient128, multiplicand: Transient128): T
   # echo "multiplicand: ", $multiplicand.significand
   # echo "columns:      ", $columns
   #
-  # 2. handle carried numbers
+  # 2. handle carried numbers.
   #
+  # var addedPrecision = 0
+  # var columnsBefore = 0
+  # for columnOffset in 0 ..< TRANSIENT_SIGNIFICAND_SIZE:
+  #   if columns[columnOffset] == 0.uint16:
+  #     columnsBefore += 1
+  #   else:
+  #     break
+  # #
   var carry = 0.uint16
   for columnOffset in 0 ..< TRANSIENT_SIGNIFICAND_SIZE:
     let cIndex = diff - columnOffset
@@ -1646,18 +1743,33 @@ proc multiplyTransients(multiplier: Transient128, multiplicand: Transient128): T
       columns[cIndex] = remainder
     else:
       carry = 0
+  #
+  # var columnsAfter = 0
+  # for columnOffset in 0 ..< TRANSIENT_SIGNIFICAND_SIZE:
+  #   if columns[columnOffset] == 0.uint16:
+  #     columnsAfter += 1
+  #   else:
+  #     break
+  # if columnsBefore > columnsAfter:
+  #   addedPrecision = columnsBefore - columnsAfter
   # echo "carried:      ", $columns
   #
-  # 3. create answer
+  # 3. create final answer
   #
   let exp = multiplicand.exponent + multiplier.exponent
-  result = Transient128(kind: dkValued, significand: TALLZERO, exponent: exp)
+  var answer = Transient128(kind: dkValued, significand: TALLZERO, exponent: exp)
   for index in 0 ..< TRANSIENT_SIGNIFICAND_SIZE:
-    result.significand[index] = columns[index].byte
+    answer.significand[index] = columns[index].byte
   #
-  # 4. adjust for significance
+  # 4. attempt conversion to Decimal128
   #
-  #  TODO
+  let conv = answer.convertTransientToDecimal128()
+  #
+  # 5. adjust Precision (significance) so that is the lessor of the originals
+  #    allow for carries because precision is always infinite "to the left"
+  #
+  #
+  result = applyLowerPrecision(multiplier, multiplicand, conv)
 
 
 proc `*`*(left: Decimal128, right: Decimal128): Decimal128 =
@@ -1682,14 +1794,15 @@ proc `*`*(left: Decimal128, right: Decimal128): Decimal128 =
   ## If either number is (+/-) Infinite, the result is Infinite, but the signs are taken into account.
   ## When a Infinite number is multiplied by zero, the result is NAN.
   ## If either number is NAN, the result is NAN. Always.
+  echo left.getPrecision()
+  echo right.getPrecision()
   case left.kind:
   of dkValued:
     case right.kind:
     of dkValued:
       let trLeft = newTransient128(left)
       let trRight = newTransient128(right)
-      let answer = multiplyTransients(trLeft, trRight)
-      result = answer.convertTransientToDecimal128()
+      result = multiplyTransients(trLeft, trRight)
       echo $result
     of dkInfinite:
       result = productInfinity(left, right)

@@ -69,6 +69,7 @@ suite "scale and precision":
 
     check newDecimal128("-0.0000").getPrecision == 4
     check newDecimal128("0.0000").getPrecision == 4
+    check newDecimal128("0.083").getPrecision == 3
     check newDecimal128("0.0").getPrecision == 1
 
     check newDecimal128("1.0000").getPrecision == 5

@@ -5,20 +5,28 @@ import decimal128
 
 suite "multiplication and division":
   test "basic multiplication":
-    check ( newDecimal128(    "2.0") * newDecimal128(    "3.0") ) === newDecimal128(    "6.0")
-    check ( newDecimal128(    "1.0") * newDecimal128(    "3.0") ) === newDecimal128(    "3.3")
-    check ( newDecimal128(    "0.0") * newDecimal128(    "3.0") ) === newDecimal128(    "0.0")
-    check ( newDecimal128(    "1.8") * newDecimal128(    "3.3") ) === newDecimal128(    "5.9")  # NOT 5.94 due to significance rules
-    check ( newDecimal128(    "9"  ) * newDecimal128(    "3"  ) ) === newDecimal128(     "27")
-    check ( newDecimal128(   "99"  ) * newDecimal128(   "99"  ) ) === newDecimal128(   "98E2")  # NOT 9801 due to significance rules
-    check ( newDecimal128( "9900"  ) * newDecimal128( "9900"  ) ) === newDecimal128(   "98E6")  # NOT 98,010,000 due to significance
-    check ( newDecimal128( "9900.0") * newDecimal128( "9900.0") ) === newDecimal128("98010E3")
+    check ( newDecimal128(    "2.0") * newDecimal128(    "3.0") ) === newDecimal128(     "6.0")
+    check ( newDecimal128(    "1.0") * newDecimal128(    "3.0") ) === newDecimal128(     "3.0")
+    check ( newDecimal128(    "0.0") * newDecimal128(    "3.0") ) === newDecimal128(     "0.0")
+    check ( newDecimal128(    "1.8") * newDecimal128(    "3.3") ) === newDecimal128(     "5.9")  # NOT 5.94 due to significance rules
+    check ( newDecimal128(    "9"  ) * newDecimal128(    "3"  ) ) === newDecimal128(      "27")
+    check ( newDecimal128(   "99"  ) * newDecimal128(   "99"  ) ) === newDecimal128(    "9801")  
+    check ( newDecimal128( "9900"  ) * newDecimal128( "9900"  ) ) === newDecimal128("98010000")  # integer*integer infinite prec
+    check ( newDecimal128( "9900.0") * newDecimal128( "9900.0") ) === newDecimal128( "98010E3")  # maintaining set prec = 5
     #
-    # check ( newDecimal128( "123456789012345678901234567890123") + newDecimal128("1") ) === newDecimal128( "123456789012345678901234567890124")
-    # check ( newDecimal128(  "99999999999999999999999999999999") + newDecimal128("1") ) === newDecimal128( "100000000000000000000000000000000")
-    # #
-    # check ( newDecimal128("1234567890123456789012345678901234") + newDecimal128("1") ) === newDecimal128("1234567890123456789012345678901235")
-    # check ( newDecimal128("9999999999999999999999999999999998") + newDecimal128("1") ) === newDecimal128("9999999999999999999999999999999999")
+    check ( newDecimal128( "123456789012345678901234567890123") * newDecimal128("1") ) === newDecimal128("123456789012345678901234567890123")
+    check ( newDecimal128( "123456789012345678901234567890123.0") * newDecimal128("1") ) === newDecimal128("123456789012345678901234567890123.0")
+    check ( newDecimal128( "123456789012345678901234567890123") * newDecimal128("1.0") ) === newDecimal128("123456789012345678901234567890123")
+    check ( newDecimal128( "123456789012345678901234567890123.0") * newDecimal128("1.0") ) === newDecimal128("1.2E32")
+    #
+    check ( newDecimal128("1") * newDecimal128( "123456789012345678901234567890123") ) === newDecimal128("123456789012345678901234567890123")
+    check ( newDecimal128("1") * newDecimal128( "123456789012345678901234567890123.0") ) === newDecimal128("123456789012345678901234567890123.0")
+    check ( newDecimal128("1.0") * newDecimal128( "123456789012345678901234567890123") ) === newDecimal128("123456789012345678901234567890123")
+    check ( newDecimal128("1.0") * newDecimal128( "123456789012345678901234567890123.0") ) === newDecimal128("1.2E32")
+    #
+    check ( newDecimal128("1234567890123456789012345678901234") * newDecimal128("1") ) === newDecimal128("1234567890123456789012345678901234")
+
+  test "non-number multiplication":
 
     check ( newDecimal128(    "inf") * newDecimal128(    "1.0") ) === newDecimal128(    "inf")
     check ( newDecimal128(   "-inf") * newDecimal128(    "1.0") ) === newDecimal128(   "-inf")
