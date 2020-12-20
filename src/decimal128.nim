@@ -46,7 +46,7 @@
 ## 
 ##     assert $b == "0.001234000000000000000000000000000000"
 ##     assert b.getPrecision == 34
-##     assert b.getScale = 36
+##     assert b.getScale == 36
 ##     assert b.toFloat == 0.001234
 ##
 ##     assert $(newDecimal128("423.77") + newDecimal128("20.9362")) == "444.71"
