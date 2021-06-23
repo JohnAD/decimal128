@@ -1199,6 +1199,24 @@ proc newDecimal128*(str: string, precision: int = NOP, scale: int = NOP): Decima
     result = result.setPrecision(precision)
 
 
+proc parse*(decimal: var Decimal128, str: string, precision: int = NOP, scale: int = NOP) =
+  ## convert a string containing a decimal number to Decimal128
+  ##
+  ## see newDecimal128(string) for more details about the operation.
+  let t = parseFromString(str)
+  decimal = convertTransientToDecimal128(t)
+  if scale != NOP:
+    decimal = decimal.setScale(scale)
+    if precision != NOP:  # if both are set, then precision is simply a checker
+      if decimal.getPrecision() > precision:
+        raise newException(
+          ValueError, 
+          "a precision of $1 was requested, but $2 has a precision of $3 at scale $4".format($precision, $decimal, $getPrecision(decimal), $scale)
+        )
+  elif precision != NOP:
+    decimal = decimal.setPrecision(precision)
+
+
 proc newDecimal128*(value: int, precision: int = NOP, scale: int = NOP): Decimal128 =
   ## Convert an integer to Decimal128
   ##
